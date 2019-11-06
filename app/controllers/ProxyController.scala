@@ -1,5 +1,6 @@
 package controllers
 
+import loggers.ServerLogger
 import javax.inject._
 import play.api._
 import play.api.mvc._
@@ -8,7 +9,7 @@ import play.api.http.HttpEntity
 import com.typesafe.config.ConfigFactory
 import scalaj.http.{Http, HttpResponse}
 import akka.util.ByteString
-import play.api.libs.json.{JsValue}
+import play.api.libs.json.JsValue
 
 /**
  * Proxy pass controller
@@ -18,7 +19,7 @@ import play.api.libs.json.{JsValue}
  * @param config configuration object
  */
 @Singleton
-class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration) extends AbstractController(cc) {
+class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)(logger: ServerLogger) extends AbstractController(cc) {
 
   /**
    * Returns response of the clients requests from node
@@ -27,16 +28,15 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
    * @return Result response from node
    */
   def proxy() = Action { implicit request: Request[AnyContent] =>
+    // Log request
+    logger.logRequest(request)
+    
     // Prepare request header
     val reqHeaders : Seq[(String, String)] = request.headers.headers
-    
-    // Set server attributes
-    var optHost : Option[String] = config.getString("ergo.node.host")
-    var optPort : Option[String] = config.getString("ergo.node.api.port")
 
     // Set node params
-    val host : String = if (optHost.isDefined) optHost.get else ConfigFactory.load().getString("ergo.node.host")
-    val port : String = if (optPort.isDefined) optPort.get else ConfigFactory.load().getString("ergo.node.api.port")
+    val host : String = config.getString("ergo.node.host").getOrElse(ConfigFactory.load().getString("ergo.node.host"))
+    val port : String = config.getString("ergo.node.api.port").getOrElse(ConfigFactory.load().getString("ergo.node.api.port"))
 
     // Send incoming request to node
     val response : HttpResponse[Array[Byte]] = {
@@ -51,6 +51,9 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
         Http(host + ":" + port + request.uri).headers(reqHeaders).postData(body).asBytes
       }
     }
+    
+    // Log response
+    logger.logResponse(response)
     
     var respHeaders : Map[String, String] = response.headers.map({
       case (key, value) => 
