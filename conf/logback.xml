@@ -16,6 +16,13 @@
     </encoder>
   </appender>
 
+  <appender name="PROXYFILE" class="ch.qos.logback.core.FileAppender">
+    <file>${application.home:-.}/logs/server.log</file>
+    <encoder>
+      <pattern>%date - %message%n</pattern>
+    </encoder>
+  </appender>
+
   <appender name="ASYNCFILE" class="ch.qos.logback.classic.AsyncAppender">
     <appender-ref ref="FILE" />
   </appender>
@@ -24,8 +31,15 @@
     <appender-ref ref="STDOUT" />
   </appender>
 
+  <appender name="PROXYASYNCFILE" class="ch.qos.logback.classic.AsyncAppender">
+    <appender-ref ref="PROXYFILE" />
+  </appender>
+
   <logger name="play" level="INFO" />
   <logger name="application" level="DEBUG" />
+  <logger name="proxy" level="DEBUG">
+    <appender-ref ref="PROXYASYNCFILE" />
+  </logger>
 
   <root level="WARN">
     <!--<appender-ref ref="ASYNCFILE" />-->

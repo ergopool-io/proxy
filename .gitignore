@@ -9,3 +9,4 @@ target
 /.metals
 /.g8
 /.bloop
+.DS_STORE
