@@ -10,3 +10,4 @@ target
 /.g8
 /.bloop
 .DS_STORE
+.vscode
