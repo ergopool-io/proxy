@@ -36,13 +36,17 @@
   </appender>
 
   <logger name="play" level="INFO" />
-  <logger name="application" level="DEBUG" />
-  <logger name="proxy" level="DEBUG">
+  
+  <logger name="application" level="DEBUG">
+    <appender-ref ref="ASYNCFILE" />
+  </logger>
+  
+  <logger name="proxy" level="INFO">
     <appender-ref ref="PROXYASYNCFILE" />
   </logger>
 
   <root level="WARN">
-    <!--<appender-ref ref="ASYNCFILE" />-->
+    <!-- <appender-ref ref="ASYNCFILE" /> -->
     <appender-ref ref="ASYNCSTDOUT" />
   </root>
 

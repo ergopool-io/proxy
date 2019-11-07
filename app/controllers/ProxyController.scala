@@ -9,64 +9,143 @@ import play.api.http.HttpEntity
 import com.typesafe.config.ConfigFactory
 import scalaj.http.{Http, HttpResponse}
 import akka.util.ByteString
-import play.api.libs.json.JsValue
 
 /**
  * Proxy pass controller
  * 
- * @constructor create new controller for proxy passing
- * @param cc controller component
- * @param config configuration object
+ * @constructor Create new controller for proxy passing
+ * @param cc Controller component
+ * @param config Configuration object
  */
 @Singleton
 class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)(logger: ServerLogger) extends AbstractController(cc) {
 
+  // Set pool server params
+  val poolConnection: String = config.getString("pool.server.connection").getOrElse(ConfigFactory.load().getString("pool.server.connection"))
+  
+  // Set the node params
+  val nodeConnection: String = config.getString("ergo.node.connection").getOrElse(ConfigFactory.load().getString("ergo.node.connection"))
+  
   /**
-   * Returns response of the clients requests from node
+   * A structure for responses from the node
    * 
-   * @param Request[AnyContent] request
-   * @return Result response from node
+   * @constructor Create a new object containing the params
+   * @param statusCode [[Int]] The status code of the response
+   * @param headers [[Map[String, String]]] The headers of the response
+   * @param body [[Array[Byte]]] The body of the response
+   * @param contentType [[String]] The content type of the response
    */
-  def proxy() = Action { implicit request: Request[AnyContent] =>
-    // Log request
-    logger.logRequest(request)
+  case class ProxyResponse(statusCode: Int, headers: Map[String, String], body: Array[Byte], contentType: String)
+
+  /**
+   * Send a request to a url with its all headers and body
+   * 
+   * @param url [[String]] Servers url
+   * @param request [[Request[AnyContent]]] The request to send
+   * @return [[HttpResponse[Array[Byte]]]] Response from the server
+   */ 
+  private def sendRequest(url: String, request: Request[AnyContent]): HttpResponse[Array[Byte]] = {
     
-    // Prepare request header
-    val reqHeaders : Seq[(String, String)] = request.headers.headers
+    // Prepare the request headers
+    val reqHeaders: Seq[(String, String)] = request.headers.headers
 
-    // Set node params
-    val host : String = config.getString("ergo.node.host").getOrElse(ConfigFactory.load().getString("ergo.node.host"))
-    val port : String = config.getString("ergo.node.api.port").getOrElse(ConfigFactory.load().getString("ergo.node.api.port"))
-
-    // Send incoming request to node
-    val response : HttpResponse[Array[Byte]] = {
+    // Send the incoming request to node
+    val response: HttpResponse[Array[Byte]] = {
       if (request.method == "GET") {
-        Http(host + ":" + port + request.uri).headers(reqHeaders).asBytes
+        Http(url).headers(reqHeaders).asBytes
       }
       else {
-        // Prepare request body
-        val rawBody : Option[JsValue] = request.body.asJson
-        val body : String = if (rawBody.isDefined) rawBody.get.toString else ""
+        // Prepare the request body
+        val body: String = request.body.toString
   
-        Http(host + ":" + port + request.uri).headers(reqHeaders).postData(body).asBytes
+        Http(url).headers(reqHeaders).postData(body).asBytes
       }
     }
+    response
+  }
+
+  /**
+   * Prepare and return the response with its all headers and body
+   * 
+   * @param response [[HttpResponse[Array[Byte]]]] The request to send
+   * @return [[ProxyResponse]] Prepared response
+   */ 
+  private def sendResponse(response: HttpResponse[Array[Byte]]): ProxyResponse = {
     
-    // Log response
-    logger.logResponse(response)
-    
-    var respHeaders : Map[String, String] = response.headers.map({
+    // Convert the headers to Map[String, String] type
+    var respHeaders: Map[String, String] = response.headers.map({
       case (key, value) => 
         key -> value.mkString(" ")
     })
 
-    // Remove ignored headers
-    val contentType : String = respHeaders.getOrElse("Content-Type", "")
-    val filteredHeaders : Map[String, String] = respHeaders.removed("Content-Type").removed("Content-Length")
+    // Remove the ignored headers
+    val contentType: String = respHeaders.getOrElse("Content-Type", "")
+    val filteredHeaders: Map[String, String] = respHeaders.removed("Content-Type").removed("Content-Length")
+
+    // Return the response
+    ProxyResponse(
+      statusCode = response.code, 
+      headers = filteredHeaders,
+      body = response.body,
+      contentType = contentType
+    )
+  }
+  
+  /**
+   * Returns the response of the clients requests from the node
+   * 
+   * @param request [[Request[AnyContent]]] The request to send
+   * @return [[ProxyResponse]] Response from the node
+   */
+  private def proxy(request: Request[AnyContent], config: Configuration = this.config): ProxyResponse = {
+    
+    // Log the request
+    logger.logRequest(request)
+    
+    // Send the request to the node
+    val response: HttpResponse[Array[Byte]] = this.sendRequest(s"${this.nodeConnection}${request.uri}", request)
+    
+    // Log the response
+    logger.logResponse(response)
+    
+    // Return the response
+    this.sendResponse(response)
+  }
+
+  /**
+   * Action handler for proxy passing
+   * 
+   * @return [[Result]] Response from the node
+   */
+  def proxyPass() = Action { implicit request: Request[AnyContent] =>
+    
+    // Send the request to node and get its response
+    val response: ProxyResponse = this.proxy(request)
 
     Result(
-      header = ResponseHeader(response.code, filteredHeaders),
-      body = HttpEntity.Strict(ByteString(response.body), Some(contentType))
+      header = ResponseHeader(response.statusCode, response.headers),
+      body = HttpEntity.Strict(ByteString(response.body), Some(response.contentType))
+    )
+  }
+
+  /**
+   * Action handler to send solution to node and resend it to the pool server if it's a correct solution
+   * 
+   * @return [[Result]] Response from the node
+   */
+  def solution() = Action { implicit request: Request[AnyContent] =>
+
+    // Send the request to node and get its response
+    val response: ProxyResponse = this.proxy(request)
+
+    // Send the request to the pool server if the nodes response is 200
+    if (response.statusCode == 200) {
+      this.sendRequest(s"${this.poolConnection}", request)
+    }
+
+    Result(
+      header = ResponseHeader(response.statusCode, response.headers),
+      body = HttpEntity.Strict(ByteString(response.body), Some(response.contentType))
     )
   }
 }
