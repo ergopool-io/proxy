@@ -141,4 +141,28 @@ class ProxyControllerSpec extends PlaySpec with GuiceOneAppPerTest with Injectin
       contentAsString(proxy) must include ("{\"success\": false}")
     }
   }
+
+  /** Check solution requests */
+  "ProxyController getMiningCandidate" should {
+
+    /** 
+     * Purpose: Check pb key is in the response.  
+     * Prerequisites: Check if mock api (configured in test.conf) works and change it if wanted.  
+     * Scenario: It gets config from `test.conf` and sends a fake GET request to `test.route1` and passes it with the config to ProxyController. 
+     *           Then returns the response with pb in the body.
+     * Test Conditions:
+     * * status is `200`
+     * * Content-Type is `application/json`
+     * * Content is `{"pb":7.991447316561134E+63,"success":true}`
+     */
+    "return 200 status code from a new instance of controller" in {
+      val testRoute = config.getString("test.route1")
+      val proxy = controller.getMiningCandidate().apply(FakeRequest(GET, testRoute).withHeaders("api_key" -> "some string"))
+      val pb: String = Json.toJson(config.getDouble("pool.server.difficulty")).toString
+
+      status(proxy) mustBe OK
+      contentType(proxy) mustBe Some("application/json")
+      contentAsString(proxy) must include ("{\"pb\":" + pb + ",\"success\":true}")
+    }
+  }
 }

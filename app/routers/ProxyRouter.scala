@@ -15,13 +15,14 @@ import play.api.routing.sird._
 class ProxyRouter @Inject()(controller: ProxyController) extends SimpleRouter {
 
   override def routes: Routes = {
-    case POST(p"/mining/solution") => {
+    case POST(p"/mining/solution") =>
       controller.solution
-    }
+
+    case GET(p"/mining/candidate") =>
+      controller.getMiningCandidate
       
-    case GET(p"/$path*") => {
+    case GET(p"/$path*") =>
       controller.proxyPass
-    }
 
     case POST(p"/$path*") =>
       controller.proxyPass

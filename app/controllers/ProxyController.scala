@@ -9,6 +9,7 @@ import play.api.http.HttpEntity
 import com.typesafe.config.ConfigFactory
 import scalaj.http.{Http, HttpResponse}
 import akka.util.ByteString
+import play.api.libs.json.{Json, JsValue, JsObject}
 
 /**
  * Proxy pass controller
@@ -21,10 +22,10 @@ import akka.util.ByteString
 class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)(logger: ServerLogger) extends AbstractController(cc) {
 
   // Set pool server params
-  val poolConnection: String = config.getString("pool.server.connection").getOrElse(ConfigFactory.load().getString("pool.server.connection"))
+  val poolConnection: String = config.getOptional[String]("pool.server.connection").getOrElse(ConfigFactory.load().getString("pool.server.connection"))
   
   // Set the node params
-  val nodeConnection: String = config.getString("ergo.node.connection").getOrElse(ConfigFactory.load().getString("ergo.node.connection"))
+  val nodeConnection: String = config.getOptional[String]("ergo.node.connection").getOrElse(ConfigFactory.load().getString("ergo.node.connection"))
   
   /**
    * A structure for responses from the node
@@ -35,7 +36,7 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
    * @param body [[Array[Byte]]] The body of the response
    * @param contentType [[String]] The content type of the response
    */
-  case class ProxyResponse(statusCode: Int, headers: Map[String, String], body: Array[Byte], contentType: String)
+  case class ProxyResponse(statusCode: Int, headers: Map[String, String],var body: Array[Byte], contentType: String)
 
   /**
    * Send a request to a url with its all headers and body
@@ -146,6 +147,44 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
     Result(
       header = ResponseHeader(response.statusCode, response.headers),
       body = HttpEntity.Strict(ByteString(response.body), Some(response.contentType))
+    )
+  }
+
+  /**
+   * Action handler to put "pb" in the body of response for route /mining/candidate
+   * 
+   * @return [[Result]] Response from the node with the key "pb"
+   */
+  def getMiningCandidate() = Action { implicit request: Request[AnyContent] =>
+
+    // Log the request
+    logger.logRequest(request)
+    
+    // Send the request to the node
+    var response: HttpResponse[Array[Byte]] = this.sendRequest(s"${this.nodeConnection}${request.uri}", request)
+    
+    // Get the response in ProxyResponse format
+    var preparedResponse: ProxyResponse = this.sendResponse(response)
+
+    val newResponse: HttpResponse[Array[Byte]] = {
+      if (preparedResponse.statusCode == 200) {
+        // Get the pool difficulty from the config and put it in the body
+        val poolDifficulty: Double = config.getOptional[Double]("pool.server.difficulty").getOrElse(ConfigFactory.load().getDouble("pool.server.difficulty"))
+        val body: JsValue = Json.parse(response.body).as[JsObject] + ("pb" -> Json.toJson(poolDifficulty))
+        preparedResponse.body = body.toString.getBytes
+        new HttpResponse[Array[Byte]](body.toString.getBytes, response.code, response.headers)
+      }
+      else {
+        response
+      }
+    }
+    
+    // Log the response
+    logger.logResponse(newResponse)
+    
+    Result(
+      header = ResponseHeader(preparedResponse.statusCode, preparedResponse.headers),
+      body = HttpEntity.Strict(ByteString(preparedResponse.body), Some(preparedResponse.contentType))
     )
   }
 }
