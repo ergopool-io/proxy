@@ -12,6 +12,14 @@ libraryDependencies += guice
 libraryDependencies += "org.scalatestplus.play" %% "scalatestplus-play" % "4.0.3" % Test
 libraryDependencies += "org.scalaj" %% "scalaj-http" % "2.4.2"
 
+val circeVersion = "0.12.3"
+
+libraryDependencies ++= Seq(
+  "io.circe" %% "circe-core",
+  "io.circe" %% "circe-generic",
+  "io.circe" %% "circe-parser"
+).map(_ % circeVersion)
+
 // Assembly build plugin
 mainClass in assembly := Some("play.core.server.ProdServerStart")
 fullClasspath in assembly += Attributed.blank(PlayKeys.playPackageAssets.value)
