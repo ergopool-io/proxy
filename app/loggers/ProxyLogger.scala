@@ -5,7 +5,9 @@ import play.api.Logger
 import akka.util.ByteString
 import scalaj.http.HttpResponse
 import com.typesafe.config.ConfigFactory
-import play.api.libs.json.{JsValue, Json, JsObject, JsNull}
+import io.circe.syntax._
+import io.circe.parser.parse
+import io.circe.Json
 
 class ServerLogger {
   // The logger object
@@ -22,28 +24,28 @@ class ServerLogger {
   def logRequest(request: Request[AnyContent]): Unit = {
 
     // Remove body or convert it to String if it's not in Json format
-    val body: JsValue = {
+    val body: Json = {
       try {
-        request.body.asJson.getOrElse(JsNull)
+        parse(request.body.toString).getOrElse(Json.Null)
       } catch {
         case _: Throwable => {
           if (this.logNotJsonBody) {
-            Json.toJson(request.body.toString)
+            parse(request.body.toString).getOrElse(Json.Null)
           }
           else {
-            Json.toJson("<Body is removed due to config>")
+            "<Body is removed due to config>".asJson
           }
         }
       }
     }
     
-    var json = Json.toJson(Map(
-      "method"  -> Json.toJson(request.method),
-      "path"    -> Json.toJson(request.uri),
+    var json = Json.obj(
+      "method"  -> request.method.asJson,
+      "path"    -> request.uri.asJson,
       "body"    -> body,
-      "headers" -> Json.toJson(request.headers.toMap),
-    ))
-    this.logger.info(s"${json.toString}")
+      "headers" -> request.headers.toMap.asJson,
+    )
+    this.logger.info(s"${json.noSpaces}")
   }
 
   /**
@@ -54,24 +56,24 @@ class ServerLogger {
   def logResponse(response: HttpResponse[Array[Byte]]): Unit = {
     
     // Remove body or convert it to String if it's not in Json format
-    val body: JsValue = {
+    val body: Json = {
       try {
-        Json.parse(response.body)
+        parse(response.body.map(_.toChar).mkString)getOrElse(Json.Null)
       } catch {
         case _: Throwable => {
           if (this.logNotJsonBody) {
-            Json.toJson(response.body.toString)
+            parse(response.body.toString).getOrElse(Json.Null)
           }
           else {
-            Json.toJson("<Body is removed due to config>")
+            "<Body is removed due to config>".asJson
           }
         }
       }
     }
-    var json = Json.toJson(Map(
+    var json = Json.obj(
       "body"    -> body,
-      "headers" -> Json.toJson(response.headers.toMap),
-    ))
-    this.logger.info(s"${json.toString}")
+      "headers" -> response.headers.toMap.asJson,
+    )
+    this.logger.info(s"${json.noSpaces}")
   }
 }

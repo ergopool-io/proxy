@@ -9,7 +9,9 @@ import play.api.http.HttpEntity
 import com.typesafe.config.ConfigFactory
 import scalaj.http.{Http, HttpResponse}
 import akka.util.ByteString
-import play.api.libs.json.{Json, JsValue, JsObject}
+import io.circe.syntax._
+import io.circe.parser.parse
+import io.circe.Json
 
 /**
  * Proxy pass controller
@@ -169,8 +171,9 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
     val newResponse: HttpResponse[Array[Byte]] = {
       if (preparedResponse.statusCode == 200) {
         // Get the pool difficulty from the config and put it in the body
-        val poolDifficulty: Double = config.getOptional[Double]("pool.server.difficulty").getOrElse(ConfigFactory.load().getDouble("pool.server.difficulty"))
-        val body: JsValue = Json.parse(response.body).as[JsObject] + ("pb" -> Json.toJson(poolDifficulty))
+        val poolDifficulty: BigInt = BigInt(config.getOptional[String]("pool.server.difficulty").getOrElse(ConfigFactory.load().getString("pool.server.difficulty")))
+        val body: Json = io.circe.parser.parse((response.body.map(_.toChar)).mkString).getOrElse(Json.Null).deepMerge(Json.obj("pb" -> poolDifficulty.asJson))
+
         preparedResponse.body = body.toString.getBytes
         new HttpResponse[Array[Byte]](body.toString.getBytes, response.code, response.headers)
       }
