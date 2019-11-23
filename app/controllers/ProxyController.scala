@@ -2,7 +2,6 @@ package controllers
 
 import loggers.ServerLogger
 import javax.inject._
-import play.api._
 import play.api.mvc._
 import play.api.Configuration
 import play.api.http.HttpEntity
@@ -10,7 +9,6 @@ import com.typesafe.config.ConfigFactory
 import scalaj.http.{Http, HttpResponse}
 import akka.util.ByteString
 import io.circe.syntax._
-import io.circe.parser.parse
 import io.circe.Json
 
 /**
@@ -45,7 +43,7 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
    * 
    * @param url [[String]] Servers url
    * @param request [[Request[AnyContent]]] The request to send
-   * @return [[HttpResponse[Array[Byte]]]] Response from the server
+   * @return [[HttpResponse]] Response from the server
    */ 
   private def sendRequest(url: String, request: Request[AnyContent]): HttpResponse[Array[Byte]] = {
     
@@ -69,14 +67,14 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
 
   /**
    * Prepare and return the response with its all headers and body
-   * 
-   * @param response [[HttpResponse[Array[Byte]]]] The request to send
+   *
+   * @param response [[HttpResponse]] The request to send
    * @return [[ProxyResponse]] Prepared response
-   */ 
+   */
   private def sendResponse(response: HttpResponse[Array[Byte]]): ProxyResponse = {
     
     // Convert the headers to Map[String, String] type
-    var respHeaders: Map[String, String] = response.headers.map({
+    val respHeaders: Map[String, String] = response.headers.map({
       case (key, value) => 
         key -> value.mkString(" ")
     })
@@ -100,13 +98,13 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
    * @param request [[Request[AnyContent]]] The request to send
    * @return [[ProxyResponse]] Response from the node
    */
-  private def proxy(request: Request[AnyContent], config: Configuration = this.config): ProxyResponse = {
+  private def proxy(request: Request[AnyContent], config: Configuration = this.config, connection: String = this.nodeConnection): ProxyResponse = {
     
     // Log the request
     logger.logRequest(request)
     
     // Send the request to the node
-    val response: HttpResponse[Array[Byte]] = this.sendRequest(s"${this.nodeConnection}${request.uri}", request)
+    val response: HttpResponse[Array[Byte]] = this.sendRequest(s"${connection}${request.uri}", request)
     
     // Log the response
     logger.logResponse(response)
@@ -120,7 +118,7 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
    * 
    * @return [[Result]] Response from the node
    */
-  def proxyPass() = Action { implicit request: Request[AnyContent] =>
+  def proxyPass(): Action[AnyContent] = Action { implicit request: Request[AnyContent] =>
     
     // Send the request to node and get its response
     val response: ProxyResponse = this.proxy(request)
@@ -136,14 +134,18 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
    * 
    * @return [[Result]] Response from the node
    */
-  def solution() = Action { implicit request: Request[AnyContent] =>
+  def solution(): Action[AnyContent] = Action { implicit request: Request[AnyContent] =>
 
     // Send the request to node and get its response
     val response: ProxyResponse = this.proxy(request)
 
     // Send the request to the pool server if the nodes response is 200
     if (response.statusCode == 200) {
-      this.sendRequest(s"${this.poolConnection}", request)
+      try {
+        this.sendRequest(s"${this.poolConnection}", request)
+      } catch {
+        case _: Throwable =>
+      }
     }
 
     Result(
@@ -157,22 +159,22 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
    * 
    * @return [[Result]] Response from the node with the key "pb"
    */
-  def getMiningCandidate() = Action { implicit request: Request[AnyContent] =>
+  def getMiningCandidate: Action[AnyContent] = Action { implicit request: Request[AnyContent] =>
 
     // Log the request
     logger.logRequest(request)
     
     // Send the request to the node
-    var response: HttpResponse[Array[Byte]] = this.sendRequest(s"${this.nodeConnection}${request.uri}", request)
+    val response: HttpResponse[Array[Byte]] = this.sendRequest(s"${this.nodeConnection}${request.uri}", request)
     
     // Get the response in ProxyResponse format
-    var preparedResponse: ProxyResponse = this.sendResponse(response)
+    val preparedResponse: ProxyResponse = this.sendResponse(response)
 
     val newResponse: HttpResponse[Array[Byte]] = {
       if (preparedResponse.statusCode == 200) {
         // Get the pool difficulty from the config and put it in the body
         val poolDifficulty: BigInt = BigInt(config.getOptional[String]("pool.server.difficulty").getOrElse(ConfigFactory.load().getString("pool.server.difficulty")))
-        val body: Json = io.circe.parser.parse((response.body.map(_.toChar)).mkString).getOrElse(Json.Null).deepMerge(Json.obj("pb" -> poolDifficulty.asJson))
+        val body: Json = io.circe.parser.parse(response.body.map(_.toChar).mkString).getOrElse(Json.Null).deepMerge(Json.obj("pb" -> poolDifficulty.asJson))
 
         preparedResponse.body = body.toString.getBytes
         new HttpResponse[Array[Byte]](body.toString.getBytes, response.code, response.headers)
@@ -189,5 +191,26 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
       header = ResponseHeader(preparedResponse.statusCode, preparedResponse.headers),
       body = HttpEntity.Strict(ByteString(preparedResponse.body), Some(preparedResponse.contentType))
     )
+  }
+
+  /**
+   * Action handler for sending share to the pool server
+   *
+   * @return [[Result]] Response from the pool server
+   */
+  def sendShare: Action[AnyContent] = Action { implicit request: Request[AnyContent] =>
+
+    try {
+      // Send the request to pool server and get its response
+      val response: ProxyResponse = this.proxy(request, connection = this.poolConnection)
+
+      Result(
+        header = ResponseHeader(response.statusCode, response.headers),
+        body = HttpEntity.Strict(ByteString(response.body), Some(response.contentType))
+      )
+    } catch {
+      case _: Throwable =>
+        Ok(Json.obj().toString()).as("application/json")
+    }
   }
 }
