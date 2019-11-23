@@ -4,16 +4,15 @@ import org.scalatestplus.play._
 import org.scalatestplus.play.guice._
 import play.api.test._
 import play.api.test.Helpers._
-import com.typesafe.config.ConfigFactory
+import com.typesafe.config.{Config, ConfigFactory}
 import play.api.Configuration
 import play.api.libs.json.Json
-import play.api.Logger
 import loggers.ServerLogger
 
 /** Check if proxy server would pass any POST or GET requests with their header and body with any route to that route of the specified node */ 
 class ProxyControllerSpec extends PlaySpec with GuiceOneAppPerTest with Injecting {
   val logger = new ServerLogger
-  val config = ConfigFactory.load("test.conf")
+  val config: Config = ConfigFactory.load("test.conf")
   val controller = new ProxyController(stubControllerComponents())(Configuration(config))(logger)
   
   /** Check GET requests */
@@ -142,7 +141,7 @@ class ProxyControllerSpec extends PlaySpec with GuiceOneAppPerTest with Injectin
     }
   }
 
-  /** Check solution requests */
+  /** Check get candidate requests */
   "ProxyController getMiningCandidate" should {
 
     /** 
@@ -163,6 +162,29 @@ class ProxyControllerSpec extends PlaySpec with GuiceOneAppPerTest with Injectin
       status(proxy) mustBe OK
       contentType(proxy) mustBe Some("application/json")
       contentAsString(proxy).replaceAll("\\s", "") must include ("{\"pb\":" + pb + ",\"success\":true}")
+    }
+  }
+
+  /** Check share requests */
+  "ProxyController sendShare" should {
+
+    /**
+     * Purpose: Check if shared would be sent to the pool server.
+     * Prerequisites: Check if mock api (configured in test.conf) works and change it if wanted.
+     * Scenario: It gets config from `test.conf` and sends a fake GET request to `test.route1` passes it with the config to ProxyController.
+     * Test Conditions:
+     * * status is `200`
+     * * Content-Type is `application/json`
+     * * Content is `{"success":true}`
+     */
+    "return 200 status code from a new instance of controller" in {
+      val testRoute = config.getString("test.route1")
+      val proxy = controller.sendShare().apply(FakeRequest(POST, testRoute).withHeaders("api_key" -> "some string"))
+      val pb: String = ConfigFactory.load().getString("pool.server.difficulty")
+
+      status(proxy) mustBe OK
+      contentType(proxy) mustBe Some("application/json")
+      contentAsString(proxy) must include ("{\"success\": true}")
     }
   }
 }
