@@ -14,9 +14,9 @@
     <file>${application.home:-.}/logs/server.log</file>
     <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
       <fileNamePattern>${application.home:-.}/logs/application-log-%d{yyyy-MM-dd}.%i.gz</fileNamePattern>
-      <maxFileSize>100MB</maxFileSize>
-      <maxHistory>7</maxHistory>
-      <totalSizeCap>3GB</totalSizeCap>
+      <maxFileSize>${play.logger.max.file.size:-100MB}</maxFileSize>
+      <maxHistory>${play.logger.max.history:-7}</maxHistory>
+      <totalSizeCap>${play.logger.total.size.cap:-3GB}</totalSizeCap>
     </rollingPolicy>
     <encoder>
       <pattern>%date - %message%n</pattern>
