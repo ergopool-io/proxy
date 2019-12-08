@@ -150,7 +150,7 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
    * Generate transaction and make a new proof
    * @return [[Json]]
    */
-  def createProof(): Json = {
+  def createProof(pk: String): Json = {
     try {
       val reqHeaders: Seq[(String, String)] = Seq(("api_key", this.apiKey), ("Content-Type", "application/json"))
       val transactionGenerateBody: String =
@@ -167,7 +167,20 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
            |}
            |""".stripMargin
       val generatedTransaction: HttpResponse[Array[Byte]] = Http(s"${this.nodeConnection}/wallet/transaction/generate").headers(reqHeaders).postData(transactionGenerateBody).asBytes
-      val generatedTransactionResponseBody: String = generatedTransaction.body.map(_.toChar).mkString
+      val transaction = generatedTransaction.body.map(_.toChar).mkString
+
+      // Exit application if transaction is not OK
+      if (!generatedTransaction.isCodeInRange(200, 299)) {
+        logger.logResponse(generatedTransaction)
+        sys.exit(1)
+      }
+      val generatedTransactionResponseBody: String =
+        s"""
+          |{
+          |   "pk": "${pk}",
+          |   "transaction": ${transaction}
+          |}
+          |""".stripMargin
 
 
       // Send generated transaction to the pool server
@@ -281,7 +294,16 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
     // Send the request to the pool server if the nodes response is 200
     if (response.statusCode == 200) {
       try {
-        Http(s"${this.poolConnection}${this.poolServerSolutionRoute}").headers(reqHeaders).postData(body).asBytes
+        val bodyForPool: String =
+          s"""
+             |{
+             |  "pk": "${(reqBody \ ("pk")).as[String]}",
+             |  "w": "${(reqBody \ ("w")).as[String]}",
+             |  "nonce": "${(reqBody \ ("n")).as[String]}",
+             |  "d": "${(reqBody \ ("d")).as[BigInt]}"
+             |}
+             |""".stripMargin
+        Http(s"${this.poolConnection}${this.poolServerSolutionRoute}").headers(reqHeaders).postData(bodyForPool).asBytes
       } catch {
         case _: Throwable =>
       }
@@ -342,7 +364,7 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
             val newBodyWithProof: Json = {
               updateProof(body)
               if (this.theProof == "") {
-                val respBody: Json = createProof()
+                val respBody: Json = createProof(cursor.downField("pk").as[String].getOrElse(""))
                 sendProofToPool() // TODO: make it async
                 if (respBody != Json.Null) respBody else body
               }
@@ -392,8 +414,8 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
            |{
            |  "pk": "${(reqBody \ ("pk")).as[String]}",
            |  "w": "${(reqBody \ ("w")).as[String]}",
-           |  "n": "${(reqBody \ ("n")).as[String]}",
-           |  "d": ${(reqBody \ ("d")).as[BigInt]}e0
+           |  "nonce": "${(reqBody \ ("n")).as[String]}",
+           |  "d": "${(reqBody \ ("d")).as[BigInt]}"
            |}
            |""".stripMargin
 
