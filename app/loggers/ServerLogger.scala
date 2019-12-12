@@ -10,7 +10,7 @@ import io.circe.Json
 
 class ServerLogger {
   // The logger object
-  private val logger = Logger("proxy")
+  val logger = Logger("proxy")
 
   // Config for logging bodies that are not in Json format
   private val logNotJsonBody: Boolean = if (ConfigFactory.load().getString("play.logger.only_json") == "false") true else false

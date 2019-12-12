@@ -1,9 +1,11 @@
 package helpers
 
+import akka.util.ByteString
 import com.typesafe.config.ConfigFactory
 import play.api.Configuration
 import com.typesafe.config.Config
 import io.circe.Json
+import play.api.mvc.RawBuffer
 
 object Helper {
   private val defaultConfig: Config = ConfigFactory.load("application.conf")
@@ -19,5 +21,15 @@ object Helper {
 
   def convertBodyToJson(body: Array[Byte]): Json = {
     io.circe.parser.parse(body.map(_.toChar).mkString).getOrElse(Json.Null)
+  }
+
+  final case class ConvertRaw(body: RawBuffer) {
+    def toJson: Json = {
+      io.circe.parser.parse(body.asBytes().getOrElse(ByteString("")).map(_.toChar).mkString).getOrElse(Json.Null)
+    }
+
+    override def toString: String = {
+      body.asBytes().getOrElse(ByteString("")).map(_.toChar).mkString
+    }
   }
 }
