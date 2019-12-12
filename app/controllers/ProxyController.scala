@@ -30,6 +30,9 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
   // The proof for the node
   private[this] var theProof: String = ""
 
+  // Check if a transaction generation is in process
+  private[this] var genTransactionInProcess = false
+
   // True if the last proof had been sent to the pool successfully, otherwise false
   private[this] var lastPoolProofWasSuccess: Boolean = true
 
@@ -46,7 +49,7 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
   // Api Key
   private[this] val apiKey: String = Helper.readConfig(config, "node.api_key")
 
-  private[this] val transactionRequestsValue = Helper.readConfig(config, "pool.transaction.value")
+  private[this] val transactionRequestsValue: Long = Helper.readConfig(config, "pool.transaction.value").toLong
   
   /**
    * A structure for responses from the node
@@ -151,6 +154,7 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
    * @return [[Json]]
    */
   def createProof(pk: String): Json = {
+    this.genTransactionInProcess = true
     try {
       val reqHeaders: Seq[(String, String)] = Seq(("api_key", this.apiKey), ("Content-Type", "application/json"))
       val transactionGenerateBody: String =
@@ -172,6 +176,7 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
       // Exit application if transaction is not OK
       if (!generatedTransaction.isCodeInRange(200, 299)) {
         logger.logResponse(generatedTransaction)
+        logger.logger.error(generatedTransaction.body.toString)
         sys.exit(1)
       }
       val generatedTransactionResponseBody: String =
@@ -190,21 +195,23 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
         s"""
            |[
            |  {
-           |    "transaction": ${generatedTransactionResponseBody},
-           |    "cost": ${this.transactionRequestsValue + 1000000}
+           |    "transaction": ${transaction},
+           |    "cost": 50000
            |  }
            |]
            |""".stripMargin
       val candidateWithTxs: HttpResponse[Array[Byte]] = Http(s"${this.nodeConnection}/mining/candidateWithTxs").headers(reqHeaders).postData(candidateWithTxsBody).asBytes
-
       val response: Json = Helper.convertBodyToJson(candidateWithTxs.body)
 
       // Update the proof
       updateProof(response)
+      this.genTransactionInProcess = false
 
       response
     } catch {
-      case _: Throwable =>
+      case error: Throwable =>
+        this.logger.logger.error(error.getMessage)
+        this.genTransactionInProcess = false
         Json.Null
     }
   }
@@ -220,7 +227,8 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
         Http(s"${this.poolConnection}${this.poolServerProofRoute}").headers(Seq(("Content-Type", "application/json"))).postData(this.theProof).asBytes
         this.lastPoolProofWasSuccess = true
       } catch {
-        case _: Throwable =>
+        case error: Throwable =>
+          this.logger.logger.error(error.getMessage)
       }
     }
   }
@@ -234,13 +242,13 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
   private def proxy(request: Request[AnyContent], config: Configuration = this.config, connection: String = this.nodeConnection): ProxyResponse = {
 
     // Log the request
-    logger.logRequest(request)
+//    logger.logRequest(request)
 
     // Send the request to the node
     val response: HttpResponse[Array[Byte]] = this.sendRequest(s"${connection}${request.uri}", request)
 
     // Log the response
-    logger.logResponse(response)
+//    logger.logResponse(response)
 
     // Return the response
     this.sendResponse(response)
@@ -267,26 +275,26 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
    *
    * @return [[Result]] Response from the node
    */
-  def solution(): Action[AnyContent] = Action { implicit request: Request[AnyContent] =>
+  def solution(): Action[RawBuffer] = Action(parse.raw) { implicit request: Request[RawBuffer] =>
     if (!this.lastPoolProofWasSuccess) sendProofToPool()
 
     // Prepare the request headers
     val reqHeaders: Seq[(String, String)] = request.headers.headers
-    val reqBody: JsValue = request.body.asJson.get
+    val reqBody: HCursor = Helper.ConvertRaw(request.body).toJson.hcursor
     val body: String =
       s"""
         |{
-        |  "pk": "${(reqBody \ ("pk")).as[String]}",
-        |  "w": "${(reqBody \ ("w")).as[String]}",
-        |  "n": "${(reqBody \ ("n")).as[String]}",
-        |  "d": ${(reqBody \ ("d")).as[BigInt]}e0
+        |  "pk": "${reqBody.downField("pk").as[String].getOrElse("")}",
+        |  "w": "${reqBody.downField("w").as[String].getOrElse("")}",
+        |  "n": "${reqBody.downField("n").as[String].getOrElse("")}",
+        |  "d": ${reqBody.downField("d").as[BigInt].getOrElse("")}e0
         |}
         |""".stripMargin
-    logger.logRequest(request)
+//    logger.logRequest(request)
 
     val rawResponse: HttpResponse[Array[Byte]] = Http(s"${this.nodeConnection}${request.uri}").headers(reqHeaders).postData(body).asBytes
 
-    logger.logResponse(rawResponse)
+//    logger.logResponse(rawResponse)
 
     // Send the request to node and get its response
     val response: ProxyResponse = this.sendResponse(rawResponse)
@@ -297,15 +305,16 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
         val bodyForPool: String =
           s"""
              |{
-             |  "pk": "${(reqBody \ ("pk")).as[String]}",
-             |  "w": "${(reqBody \ ("w")).as[String]}",
-             |  "nonce": "${(reqBody \ ("n")).as[String]}",
-             |  "d": "${(reqBody \ ("d")).as[BigInt]}"
+             |  "pk": "${reqBody.downField("pk").as[String].getOrElse("")}",
+             |  "w": "${reqBody.downField("w").as[String].getOrElse("")}",
+             |  "nonce": "${reqBody.downField("n").as[String].getOrElse("")}",
+             |  "d": "${reqBody.downField("d").as[BigInt].getOrElse("")}"
              |}
              |""".stripMargin
         Http(s"${this.poolConnection}${this.poolServerSolutionRoute}").headers(reqHeaders).postData(bodyForPool).asBytes
       } catch {
-        case _: Throwable =>
+        case error: Throwable =>
+          this.logger.logger.error(error.getMessage)
       }
     }
 
@@ -337,64 +346,74 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
    * @return [[Result]] Response from the node with the key "pb"
    */
   def getMiningCandidate: Action[AnyContent] = Action { implicit request: Request[AnyContent] =>
+    if (!this.genTransactionInProcess) {
+      // Log the request
+//      logger.logRequest(request)
 
-    // Log the request
-    logger.logRequest(request)
+      // Send the request to the node
+      val response: HttpResponse[Array[Byte]] = this.sendRequest(s"${this.nodeConnection}${request.uri}", request)
 
-    // Send the request to the node
-    val response: HttpResponse[Array[Byte]] = this.sendRequest(s"${this.nodeConnection}${request.uri}", request)
+      // Get the response in ProxyResponse format
+      val preparedResponse: ProxyResponse = this.sendResponse(response)
 
-    // Get the response in ProxyResponse format
-    val preparedResponse: ProxyResponse = this.sendResponse(response)
+      val newResponse: HttpResponse[Array[Byte]] = {
+        if (preparedResponse.statusCode == 200) {
+          // Get the pool difficulty from the config and put it in the body
+          val body: Json = Helper.convertBodyToJson(response.body)
+          val cursor: HCursor = body.hcursor
 
-    val newResponse: HttpResponse[Array[Byte]] = {
-      if (preparedResponse.statusCode == 200) {
-        // Get the pool difficulty from the config and put it in the body
-        val body: Json = Helper.convertBodyToJson(response.body)
-        val cursor: HCursor = body.hcursor
-
-        // Send block header to pool server if it's new
-        val responseBlockHeader: String = cursor.downField("msg").as[String].getOrElse("")
-        val clearedBody: String = {
-          if (responseBlockHeader != this.blockHeader) {
-            // Change block header
-            this._blockHeader = responseBlockHeader
-
-            // Get new body or set old body if an error occurred
-            val newBodyWithProof: Json = {
-              updateProof(body)
-              if (this.theProof == "") {
-                val respBody: Json = createProof(cursor.downField("pk").as[String].getOrElse(""))
-                sendProofToPool() // TODO: make it async
-                if (respBody != Json.Null) respBody else body
+          // Send block header to pool server if it's new
+          val responseBlockHeader: String = cursor.downField("msg").as[String].getOrElse("")
+          val clearedBody: String = {
+            if (responseBlockHeader != this.blockHeader) {
+              // Check if creating proof process was success
+              var changeBlockHeader: Boolean = true
+              // Get new body or set old body if an error occurred
+              val newBodyWithProof: Json = {
+                updateProof(body)
+                if (this.theProof == "") {
+                  val respBody: Json = createProof(cursor.downField("pk").as[String].getOrElse(""))
+                  sendProofToPool() // TODO: make it async
+                  if (respBody != Json.Null) respBody else {
+                    changeBlockHeader = false
+                    body
+                  }
+                }
+                else {
+                  sendProofToPool()
+                  body
+                }
               }
-              else {
-                sendProofToPool()
-                body
-              }
+              // Change block header if tried to create proof and it was successful or proof was available
+              if (changeBlockHeader)
+                this._blockHeader = responseBlockHeader
+
+              miningCandidateBody(newBodyWithProof.hcursor)
             }
-            miningCandidateBody(newBodyWithProof.hcursor)
+            else {
+              miningCandidateBody(cursor)
+            }
           }
-          else {
-            miningCandidateBody(cursor)
-          }
+
+          preparedResponse.body = clearedBody.getBytes
+          new HttpResponse[Array[Byte]](clearedBody.getBytes, response.code, response.headers)
         }
+        else {
+          response
+        }
+      }
 
-        preparedResponse.body = clearedBody.getBytes
-        new HttpResponse[Array[Byte]](clearedBody.getBytes, response.code, response.headers)
-      }
-      else {
-        response
-      }
+      // Log the response
+//      logger.logResponse(newResponse)
+
+      Result(
+        header = ResponseHeader(preparedResponse.statusCode, preparedResponse.headers),
+        body = HttpEntity.Strict(ByteString(preparedResponse.body), Some(preparedResponse.contentType))
+      )
     }
-
-    // Log the response
-    logger.logResponse(newResponse)
-
-    Result(
-      header = ResponseHeader(preparedResponse.statusCode, preparedResponse.headers),
-      body = HttpEntity.Strict(ByteString(preparedResponse.body), Some(preparedResponse.contentType))
-    )
+    else {
+      InternalServerError
+    }
   }
 
   /**
@@ -402,20 +421,20 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
    *
    * @return [[Result]] Response from the pool server
    */
-  def sendShare: Action[AnyContent] = Action { implicit request: Request[AnyContent] =>
+  def sendShare: Action[RawBuffer] = Action(parse.raw) { implicit request: Request[RawBuffer] =>
     if (!this.lastPoolProofWasSuccess) sendProofToPool()
 
     try {
       // Prepare the request headers
       val reqHeaders: Seq[(String, String)] = request.headers.headers
-      val reqBody: JsValue = request.body.asJson.get
+      val reqBody: HCursor = Helper.ConvertRaw(request.body).toJson.hcursor
       val body: String =
         s"""
            |{
-           |  "pk": "${(reqBody \ ("pk")).as[String]}",
-           |  "w": "${(reqBody \ ("w")).as[String]}",
-           |  "nonce": "${(reqBody \ ("n")).as[String]}",
-           |  "d": "${(reqBody \ ("d")).as[BigInt]}"
+           |  "pk": "${reqBody.downField("pk").as[String].getOrElse("")}",
+           |  "w": "${reqBody.downField("w").as[String].getOrElse("")}",
+           |  "nonce": "${reqBody.downField("n").as[String].getOrElse("")}",
+           |  "d": "${reqBody.downField("d").as[BigInt].getOrElse("")}"
            |}
            |""".stripMargin
 
