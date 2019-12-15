@@ -9,7 +9,9 @@ import play.api.http.HttpEntity
 import scalaj.http.{Http, HttpResponse}
 import akka.util.ByteString
 import io.circe.{ACursor, HCursor, Json}
-import play.api.libs.json.JsValue
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Future
+import scala.math.BigDecimal
 
 /**
  * Proxy pass controller
@@ -38,19 +40,44 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
 
   // Set pool server params
   private[this] val poolConnection: String = Helper.readConfig(config, "pool.connection")
-  private[this] val poolDifficulty: BigInt = BigInt(Helper.readConfig(config,"pool.difficulty"))
   private[this] val poolServerSolutionRoute: String = Helper.readConfig(config,"pool.route.solution")
   private[this] val poolServerProofRoute: String = Helper.readConfig(config,"pool.route.proof")
+  private[this] val poolServerConfigRoute: String = Helper.readConfig(config,"pool.route.config")
   private[this] val poolServerGeneratedTransactionRoute: String = Helper.readConfig(config,"pool.route.new_transaction")
-
-  // Wallet address
-  private[this] val walletAddress: String = Helper.readConfig(config, "pool.wallet")
 
   // Api Key
   private[this] val apiKey: String = Helper.readConfig(config, "node.api_key")
 
-  private[this] val transactionRequestsValue: Long = Helper.readConfig(config, "pool.transaction.value").toLong
-  
+  // True if getting config from the pool was successful
+  private[this] var poolConfigCompleted: Boolean = false
+
+  // Pool config
+  private[this] var walletAddress: String = ""
+  private[this] var poolDifficultyFactor: BigDecimal = BigDecimal(0.0)
+  private[this] var transactionRequestsValue: Long = 0
+
+  Future[Unit] {
+    var poolConfig: HCursor = Json.Null.hcursor
+    while (!this.poolConfigCompleted) {
+      val response: HCursor = {
+        try {
+          val response = Http(s"${this.poolConnection}${this.poolServerConfigRoute}").asBytes
+          poolConfigCompleted = true
+          Helper.convertBodyToJson(response.body).hcursor
+        } catch {
+          case error: Throwable =>
+            logger.logger.error(error.getMessage)
+            Thread.sleep(5000)
+            Json.Null.hcursor
+        }
+      }
+      poolConfig = response
+    }
+    this.walletAddress = poolConfig.downField("wallet_address").as[String].getOrElse("")
+    this.poolDifficultyFactor = BigDecimal(poolConfig.downField("pool_difficulty_factor").as[Double].getOrElse(0.0))
+    this.transactionRequestsValue = poolConfig.downField("reward").as[Long].getOrElse(0)
+  }
+
   /**
    * A structure for responses from the node
    * 
@@ -70,7 +97,6 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
    * @return [[HttpResponse]] Response from the server
    */ 
   private def sendRequest(url: String, request: Request[AnyContent]): HttpResponse[Array[Byte]] = {
-    
     // Prepare the request headers
     val reqHeaders: Seq[(String, String)] = request.headers.headers
 
@@ -276,52 +302,66 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
    * @return [[Result]] Response from the node
    */
   def solution(): Action[RawBuffer] = Action(parse.raw) { implicit request: Request[RawBuffer] =>
-    if (!this.lastPoolProofWasSuccess) sendProofToPool()
+    if (poolConfigCompleted) {
+      if (!this.lastPoolProofWasSuccess) sendProofToPool()
 
-    // Prepare the request headers
-    val reqHeaders: Seq[(String, String)] = request.headers.headers
-    val reqBody: HCursor = Helper.ConvertRaw(request.body).toJson.hcursor
-    val body: String =
-      s"""
-        |{
-        |  "pk": "${reqBody.downField("pk").as[String].getOrElse("")}",
-        |  "w": "${reqBody.downField("w").as[String].getOrElse("")}",
-        |  "n": "${reqBody.downField("n").as[String].getOrElse("")}",
-        |  "d": ${reqBody.downField("d").as[BigInt].getOrElse("")}e0
-        |}
-        |""".stripMargin
-//    logger.logRequest(request)
+      // Prepare the request headers
+      val reqHeaders: Seq[(String, String)] = request.headers.headers
+      val reqBody: HCursor = Helper.ConvertRaw(request.body).toJson.hcursor
+      val body: String =
+        s"""
+           |{
+           |  "pk": "${reqBody.downField("pk").as[String].getOrElse("")}",
+           |  "w": "${reqBody.downField("w").as[String].getOrElse("")}",
+           |  "n": "${reqBody.downField("n").as[String].getOrElse("")}",
+           |  "d": ${reqBody.downField("d").as[BigInt].getOrElse("")}e0
+           |}
+           |""".stripMargin
+      // logger.logRequest(request)
 
-    val rawResponse: HttpResponse[Array[Byte]] = Http(s"${this.nodeConnection}${request.uri}").headers(reqHeaders).postData(body).asBytes
+      val rawResponse: HttpResponse[Array[Byte]] = Http(s"${this.nodeConnection}${request.uri}").headers(reqHeaders).postData(body).asBytes
 
-//    logger.logResponse(rawResponse)
+      // logger.logResponse(rawResponse)
 
-    // Send the request to node and get its response
-    val response: ProxyResponse = this.sendResponse(rawResponse)
+      // Send the request to node and get its response
+      val response: ProxyResponse = this.sendResponse(rawResponse)
 
-    // Send the request to the pool server if the nodes response is 200
-    if (response.statusCode == 200) {
-      try {
-        val bodyForPool: String =
-          s"""
-             |{
-             |  "pk": "${reqBody.downField("pk").as[String].getOrElse("")}",
-             |  "w": "${reqBody.downField("w").as[String].getOrElse("")}",
-             |  "nonce": "${reqBody.downField("n").as[String].getOrElse("")}",
-             |  "d": "${reqBody.downField("d").as[BigInt].getOrElse("")}"
-             |}
-             |""".stripMargin
-        Http(s"${this.poolConnection}${this.poolServerSolutionRoute}").headers(reqHeaders).postData(bodyForPool).asBytes
-      } catch {
-        case error: Throwable =>
-          this.logger.logger.error(error.getMessage)
+      // Send the request to the pool server if the nodes response is 200
+      if (response.statusCode == 200) {
+        try {
+          val bodyForPool: String =
+            s"""
+               |{
+               |  "pk": "${reqBody.downField("pk").as[String].getOrElse("")}",
+               |  "w": "${reqBody.downField("w").as[String].getOrElse("")}",
+               |  "nonce": "${reqBody.downField("n").as[String].getOrElse("")}",
+               |  "d": "${reqBody.downField("d").as[BigInt].getOrElse("")}"
+               |}
+               |""".stripMargin
+          Http(s"${this.poolConnection}${this.poolServerSolutionRoute}").headers(reqHeaders).postData(bodyForPool).asBytes
+        } catch {
+          case error: Throwable =>
+            this.logger.logger.error(error.getMessage)
+        }
       }
-    }
 
-    Result(
-      header = ResponseHeader(response.statusCode, response.headers),
-      body = HttpEntity.Strict(ByteString(response.body), Some(response.contentType))
-    )
+      Result(
+        header = ResponseHeader(response.statusCode, response.headers),
+        body = HttpEntity.Strict(ByteString(response.body), Some(response.contentType))
+      )
+    } else {
+      Result(
+        header = ResponseHeader(500),
+        body = HttpEntity.Strict(ByteString(
+          """
+            |{
+            |   "error": 500,
+            |   "reason": "Internal Server Error",
+            |   "detail": "Can not read config from the pool"
+            |}
+            |""".stripMargin.map(_.toByte)), Some("application/json"))
+      )
+    }
   }
 
   /**
@@ -330,12 +370,13 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
    * @return [[String]]
    */
   def miningCandidateBody(cursor: HCursor): String = {
+    val b: BigDecimal = BigDecimal(cursor.downField("b").as[String].getOrElse("0"))
     s"""
        |{
        |  "msg": "${cursor.downField("msg").as[String].getOrElse("")}",
-       |  "b": ${cursor.downField("b").as[BigInt].getOrElse(BigInt("0"))},
+       |  "b": ${b},
        |  "pk": "${cursor.downField("pk").as[String].getOrElse("")}",
-       |  "pb": ${this.poolDifficulty}
+       |  "pb": ${(this.poolDifficultyFactor * b).toBigInt}
        |}
        |""".stripMargin
   }
@@ -346,73 +387,87 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
    * @return [[Result]] Response from the node with the key "pb"
    */
   def getMiningCandidate: Action[AnyContent] = Action { implicit request: Request[AnyContent] =>
-    if (!this.genTransactionInProcess) {
-      // Log the request
-//      logger.logRequest(request)
+    if (poolConfigCompleted) {
+      if (!this.genTransactionInProcess) {
+        // Log the request
+        // logger.logRequest(request)
 
-      // Send the request to the node
-      val response: HttpResponse[Array[Byte]] = this.sendRequest(s"${this.nodeConnection}${request.uri}", request)
+        // Send the request to the node
+        val response: HttpResponse[Array[Byte]] = this.sendRequest(s"${this.nodeConnection}${request.uri}", request)
 
-      // Get the response in ProxyResponse format
-      val preparedResponse: ProxyResponse = this.sendResponse(response)
+        // Get the response in ProxyResponse format
+        val preparedResponse: ProxyResponse = this.sendResponse(response)
 
-      val newResponse: HttpResponse[Array[Byte]] = {
-        if (preparedResponse.statusCode == 200) {
-          // Get the pool difficulty from the config and put it in the body
-          val body: Json = Helper.convertBodyToJson(response.body)
-          val cursor: HCursor = body.hcursor
+        val newResponse: HttpResponse[Array[Byte]] = {
+          if (preparedResponse.statusCode == 200) {
+            // Get the pool difficulty from the config and put it in the body
+            val body: Json = Helper.convertBodyToJson(response.body)
+            val cursor: HCursor = body.hcursor
 
-          // Send block header to pool server if it's new
-          val responseBlockHeader: String = cursor.downField("msg").as[String].getOrElse("")
-          val clearedBody: String = {
-            if (responseBlockHeader != this.blockHeader) {
-              // Check if creating proof process was success
-              var changeBlockHeader: Boolean = true
-              // Get new body or set old body if an error occurred
-              val newBodyWithProof: Json = {
-                updateProof(body)
-                if (this.theProof == "") {
-                  val respBody: Json = createProof(cursor.downField("pk").as[String].getOrElse(""))
-                  sendProofToPool() // TODO: make it async
-                  if (respBody != Json.Null) respBody else {
-                    changeBlockHeader = false
+            // Send block header to pool server if it's new
+            val responseBlockHeader: String = cursor.downField("msg").as[String].getOrElse("")
+            val clearedBody: String = {
+              if (responseBlockHeader != this.blockHeader) {
+                // Check if creating proof process was success
+                var changeBlockHeader: Boolean = true
+                // Get new body or set old body if an error occurred
+                val newBodyWithProof: Json = {
+                  updateProof(body)
+                  if (this.theProof == "") {
+                    val respBody: Json = createProof(cursor.downField("pk").as[String].getOrElse(""))
+                    sendProofToPool() // TODO: make it async
+                    if (respBody != Json.Null) respBody else {
+                      changeBlockHeader = false
+                      body
+                    }
+                  }
+                  else {
+                    sendProofToPool()
                     body
                   }
                 }
-                else {
-                  sendProofToPool()
-                  body
-                }
+                // Change block header if tried to create proof and it was successful or proof was available
+                if (changeBlockHeader)
+                  this._blockHeader = responseBlockHeader
+
+                miningCandidateBody(newBodyWithProof.hcursor)
               }
-              // Change block header if tried to create proof and it was successful or proof was available
-              if (changeBlockHeader)
-                this._blockHeader = responseBlockHeader
+              else {
+                miningCandidateBody(cursor)
+              }
+            }
 
-              miningCandidateBody(newBodyWithProof.hcursor)
-            }
-            else {
-              miningCandidateBody(cursor)
-            }
+            preparedResponse.body = clearedBody.getBytes
+            new HttpResponse[Array[Byte]](clearedBody.getBytes, response.code, response.headers)
           }
+          else {
+            response
+          }
+        }
 
-          preparedResponse.body = clearedBody.getBytes
-          new HttpResponse[Array[Byte]](clearedBody.getBytes, response.code, response.headers)
-        }
-        else {
-          response
-        }
+        // Log the response
+        // logger.logResponse(newResponse)
+
+        Result(
+          header = ResponseHeader(preparedResponse.statusCode, preparedResponse.headers),
+          body = HttpEntity.Strict(ByteString(preparedResponse.body), Some(preparedResponse.contentType))
+        )
+      } else {
+        InternalServerError
       }
-
-      // Log the response
-//      logger.logResponse(newResponse)
-
-      Result(
-        header = ResponseHeader(preparedResponse.statusCode, preparedResponse.headers),
-        body = HttpEntity.Strict(ByteString(preparedResponse.body), Some(preparedResponse.contentType))
-      )
     }
     else {
-      InternalServerError
+      Result(
+        header = ResponseHeader(500),
+        body = HttpEntity.Strict(ByteString(
+          """
+            |{
+            |   "error": 500,
+            |   "reason": "Internal Server Error",
+            |   "detail": "Can not read config from the pool"
+            |}
+            |""".stripMargin.map(_.toByte)), Some("application/json"))
+      )
     }
   }
 
@@ -422,34 +477,48 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
    * @return [[Result]] Response from the pool server
    */
   def sendShare: Action[RawBuffer] = Action(parse.raw) { implicit request: Request[RawBuffer] =>
-    if (!this.lastPoolProofWasSuccess) sendProofToPool()
+    if (poolConfigCompleted) {
+      if (!this.lastPoolProofWasSuccess) sendProofToPool()
 
-    try {
-      // Prepare the request headers
-      val reqHeaders: Seq[(String, String)] = request.headers.headers
-      val reqBody: HCursor = Helper.ConvertRaw(request.body).toJson.hcursor
-      val body: String =
-        s"""
-           |{
-           |  "pk": "${reqBody.downField("pk").as[String].getOrElse("")}",
-           |  "w": "${reqBody.downField("w").as[String].getOrElse("")}",
-           |  "nonce": "${reqBody.downField("n").as[String].getOrElse("")}",
-           |  "d": "${reqBody.downField("d").as[BigInt].getOrElse("")}"
-           |}
-           |""".stripMargin
+      try {
+        // Prepare the request headers
+        val reqHeaders: Seq[(String, String)] = request.headers.headers
+        val reqBody: HCursor = Helper.ConvertRaw(request.body).toJson.hcursor
+        val body: String =
+          s"""
+             |{
+             |  "pk": "${reqBody.downField("pk").as[String].getOrElse("")}",
+             |  "w": "${reqBody.downField("w").as[String].getOrElse("")}",
+             |  "nonce": "${reqBody.downField("n").as[String].getOrElse("")}",
+             |  "d": "${reqBody.downField("d").as[BigInt].getOrElse("")}"
+             |}
+             |""".stripMargin
 
-      val rawResponse: HttpResponse[Array[Byte]] = Http(s"${this.poolConnection}${this.poolServerSolutionRoute}").headers(reqHeaders).postData(body).asBytes
+        val rawResponse: HttpResponse[Array[Byte]] = Http(s"${this.poolConnection}${this.poolServerSolutionRoute}").headers(reqHeaders).postData(body).asBytes
 
-      // Send the request to pool server and get its response
-      val response: ProxyResponse = this.sendResponse(rawResponse)
+        // Send the request to pool server and get its response
+        val response: ProxyResponse = this.sendResponse(rawResponse)
 
+        Result(
+          header = ResponseHeader(response.statusCode, response.headers),
+          body = HttpEntity.Strict(ByteString(response.body), Some(response.contentType))
+        )
+      } catch {
+        case _: Throwable =>
+          Ok(Json.obj().toString()).as("application/json")
+      }
+    } else {
       Result(
-        header = ResponseHeader(response.statusCode, response.headers),
-        body = HttpEntity.Strict(ByteString(response.body), Some(response.contentType))
+        header = ResponseHeader(500),
+        body = HttpEntity.Strict(ByteString(
+          """
+            |{
+            |   "error": 500,
+            |   "reason": "Internal Server Error",
+            |   "detail": "Can not read config from the pool"
+            |}
+            |""".stripMargin.map(_.toByte)), Some("application/json"))
       )
-    } catch {
-      case _: Throwable =>
-        Ok(Json.obj().toString()).as("application/json")
     }
   }
 }
