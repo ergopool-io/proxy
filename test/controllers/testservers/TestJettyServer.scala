@@ -1,0 +1,39 @@
+package controllers.testservers
+
+import javax.servlet.http.HttpServletRequest
+import org.eclipse.jetty.server.{NetworkConnector, Server}
+import org.eclipse.jetty.servlet.ServletHandler
+
+trait TestJettyServer {
+  val serverPort: Int
+  val serverName: String
+
+  protected val server: Server
+
+  protected val handler: ServletHandler
+
+  def port(): Int = {
+    val conn = server.getConnectors()(0).asInstanceOf[NetworkConnector]
+    conn.getPort
+  }
+
+  def startServer(): Unit = {
+    println(s"$serverName started on ${port()}")
+    server.start()
+  }
+
+  def stopServer(): Unit = {
+    println(s"$serverName stopped")
+    server.stop()
+  }
+
+  def createServer() = new Server(serverPort)
+
+  def readBody(request: HttpServletRequest): String = {
+    val reader = request.getReader
+    val sb = new StringBuilder
+    var line = ""
+    while({line = reader.readLine(); line != null}) sb.append(line)
+    sb.toString
+  }
+}

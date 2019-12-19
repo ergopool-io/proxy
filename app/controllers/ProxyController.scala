@@ -158,7 +158,6 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
       if (proofVal != Json.Null) {
         val cursor: HCursor = proof.hcursor
         val proofCursor: ACursor = cursor.downField("proof")
-        //        println(proofCursor.downField("txProofs").downArray.downField("levels").as[Json].getOrElse(Json.Null).toString())
         val txProof: ACursor = proofCursor.downField("txProofs").downArray
 
         s"""
@@ -208,8 +207,8 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
       val generatedTransactionResponseBody: String =
         s"""
           |{
-          |   "pk": "${pk}",
-          |   "transaction": ${transaction}
+          |   "pk": "$pk",
+          |   "transaction": $transaction
           |}
           |""".stripMargin
 
@@ -221,7 +220,7 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
         s"""
            |[
            |  {
-           |    "transaction": ${transaction},
+           |    "transaction": $transaction,
            |    "cost": 50000
            |  }
            |]
@@ -271,7 +270,7 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
 //    logger.logRequest(request)
 
     // Send the request to the node
-    val response: HttpResponse[Array[Byte]] = this.sendRequest(s"${connection}${request.uri}", request)
+    val response: HttpResponse[Array[Byte]] = this.sendRequest(s"$connection${request.uri}", request)
 
     // Log the response
 //    logger.logResponse(response)
@@ -374,9 +373,9 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
     s"""
        |{
        |  "msg": "${cursor.downField("msg").as[String].getOrElse("")}",
-       |  "b": ${b},
+       |  "b": $b,
        |  "pk": "${cursor.downField("pk").as[String].getOrElse("")}",
-       |  "pb": ${(this.poolDifficultyFactor * b).toBigInt}
+       |  "pb": ${(b * this.poolDifficultyFactor).toBigInt}
        |}
        |""".stripMargin
   }
@@ -416,7 +415,8 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
                   if (this.theProof == "") {
                     val respBody: Json = createProof(cursor.downField("pk").as[String].getOrElse(""))
                     sendProofToPool() // TODO: make it async
-                    if (respBody != Json.Null) respBody else {
+                    if (respBody != Json.Null) respBody
+                    else {
                       changeBlockHeader = false
                       body
                     }

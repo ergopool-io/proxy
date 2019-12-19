@@ -20,6 +20,11 @@ libraryDependencies ++= Seq(
   "io.circe" %% "circe-parser"
 ).map(_ % circeVersion)
 
+libraryDependencies ++= Seq(
+  "org.eclipse.jetty" % "jetty-servlet" % "9.4.24.v20191120",
+  "org.eclipse.jetty" % "jetty-server" % "9.4.24.v20191120"
+)
+
 // Assembly build plugin
 mainClass in assembly := Some("play.core.server.ProdServerStart")
 fullClasspath in assembly += Attributed.blank(PlayKeys.playPackageAssets.value)
@@ -37,3 +42,5 @@ assemblyMergeStrategy in assembly := {
     val oldStrategy = (assemblyMergeStrategy in assembly).value
     oldStrategy(x)
 }
+
+javaOptions in Test += "-Dconfig.file=conf/test.conf"
