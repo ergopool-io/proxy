@@ -5,6 +5,7 @@ import com.typesafe.config.ConfigFactory
 import play.api.Configuration
 import com.typesafe.config.Config
 import io.circe.Json
+import javax.servlet.http.HttpServletRequest
 import play.api.mvc.RawBuffer
 
 object Helper {
@@ -21,6 +22,14 @@ object Helper {
 
   def convertBodyToJson(body: Array[Byte]): Json = {
     io.circe.parser.parse(body.map(_.toChar).mkString).getOrElse(Json.Null)
+  }
+
+  def readHttpServletRequestBody(request: HttpServletRequest): String = {
+    val reader = request.getReader
+    val sb = new StringBuilder
+    var line = ""
+    while({line = reader.readLine(); line != null}) sb.append(line)
+    sb.toString
   }
 
   final case class ConvertRaw(body: RawBuffer) {

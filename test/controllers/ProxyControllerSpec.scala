@@ -1,18 +1,24 @@
 package controllers
 
-import controllers.testservers.{TestNode, TestPoolServer}
+import com.typesafe.config.ConfigFactory
+import controllers.testservers.{NodeServlets, PoolServerServlets, TestNode, TestPoolServer}
+import helpers._
 import org.scalatestplus.play._
 import org.scalatestplus.play.guice._
 import play.api.test._
 import play.api.test.Helpers._
 import org.scalatest.BeforeAndAfterAll
+import play.api.Configuration
 
 /** Check if proxy server would pass any POST or GET requests with their header and body with any route to that route of the specified node */ 
 class ProxyControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injecting with BeforeAndAfterAll {
-  val testNodeConnection: String = "http://localhost:9001"
-  val testPoolServerConnection: String = "http://localhost:9002"
-  val node: TestNode.type = TestNode
-  val pool: TestPoolServer.type = TestPoolServer
+  val config: Configuration = Configuration(ConfigFactory.load("test.conf"))
+
+  val testNodeConnection: String = Helper.readConfig(config, "node.connection")
+  val testPoolServerConnection: String = Helper.readConfig(config, "pool.connection")
+
+  val node: TestNode = new TestNode(testNodeConnection.split(":").last.toInt)
+  val pool: TestPoolServer = new TestPoolServer(testPoolServerConnection.split(":").last.toInt)
 
   override def beforeAll(): Unit = {
     node.startServer()
@@ -31,7 +37,7 @@ class ProxyControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injecti
 
     /** 
      * Purpose: Check if proxy works on GET requests for ordinary routes.
-     * Prerequisites: Check test node and test pool server connections in test.conf .
+     * Prerequisites: Check test node and test pool server connections in test.conf.
      * Scenario: It sends a fake GET request to `/test/proxy` of the app and checks if response is OK.
      * Test Conditions:
      * * status is `200`
@@ -48,7 +54,7 @@ class ProxyControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injecti
 
     /**
      * Purpose: Check if proxy works on POST requests for ordinary routes.
-     * Prerequisites: Check test node and test pool server connections in test.conf .
+     * Prerequisites: Check test node and test pool server connections in test.conf.
      * Scenario: It sends a fake POST request to `/test/proxy` of the app and checks if response is OK.
      * Test Conditions:
      * * status is `200`
@@ -68,11 +74,11 @@ class ProxyControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injecti
   "ProxyController solution" should {
     /**
      * Purpose: Check solution won't be sent to pool server if status is 400.
-     * Prerequisites: Check test node and test pool server connections in test.conf .
+     * Prerequisites: Check test node and test pool server connections in test.conf.
      * Scenario: It sends a fake POST request with an invalid body to `/mining/solution` to the app.
      *           As the solution is invalid, status would be 400 so it won't send the request to the pool server.
      * Test Conditions:
-     * * TestPoolServer.PoolServlets.gotSolution is false
+     * * gotSolution is false
      * * status is `400`
      * * Content-Type is `application/json`
      */
@@ -91,17 +97,17 @@ class ProxyControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injecti
 
       status(response) mustBe BAD_REQUEST
       contentType(response) mustBe Some("application/json")
-      pool.Servlets.gotSolution mustBe false
+      PoolServerServlets.gotSolution mustBe false
     }
 
 
     /**
      * Purpose: Check solution will be sent to pool server if status is 200.
-     * Prerequisites: Check test node and test pool server connections in test.conf .
+     * Prerequisites: Check test node and test pool server connections in test.conf.
      * Scenario: It sends a fake POST request to `/mining/solution` to the app.
      *           Status is 200 so it should send the request to the pool server.
      * Test Conditions:
-     * * TestPoolServer.PoolServlets.gotSolution is true
+     * * TestPoolServer.servlets.gotSolution is true
      * * status is `200`
      * * Content-Type is `application/json`
      * * Content is `{"success": true}`
@@ -122,7 +128,7 @@ class ProxyControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injecti
       status(response) mustBe OK
       contentType(response) mustBe Some("application/json")
       contentAsString(response) must include ("{\"success\": true}")
-      pool.Servlets.gotSolution mustBe true
+      PoolServerServlets.gotSolution mustBe true
     }
   }
 
@@ -131,7 +137,7 @@ class ProxyControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injecti
 
     /**
      * Purpose: Check proof will be created when it's null
-     * Prerequisites: Check test node and test pool server connections in test.conf .
+     * Prerequisites: Check test node and test pool server connections in test.conf.
      * Scenario: It sends a fake GET request to `/mining/candidate` and passes it to the app.
      *           Then as it's a new block header and proof is null, `/wallet/transaction/generate` and `/mining/candidateWithTxs` should being called.
      * Test Conditions:
@@ -142,8 +148,8 @@ class ProxyControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injecti
      */
     "return 200 status code with new header and generate proof" in {
       val msg: String = "First_msg"
-      node.Servlets.msg = msg
-      node.Servlets.proof mustBe "null"
+      NodeServlets.msg = msg
+      NodeServlets.proof mustBe "null"
       val response = route(app, FakeRequest(GET, "/mining/candidate")).get
 
       val bodyCheck: String =
@@ -158,13 +164,13 @@ class ProxyControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injecti
       status(response) mustBe OK
       contentType(response) mustBe Some("application/json")
       contentAsString(response).replaceAll("\\s", "") must include (bodyCheck)
-      pool.Servlets.gotProof mustBe true
-      node.Servlets.proof must not be "null"
+      PoolServerServlets.gotProof mustBe true
+      NodeServlets.proof must not be "null"
     }
 
     /**
      * Purpose: Check proof won't be sent to the pool server if message didn't change
-     * Prerequisites: Check test node and test pool server connections in test.conf .
+     * Prerequisites: Check test node and test pool server connections in test.conf.
      * Scenario: It sends a fake GET request to `/mining/candidate` and passes it to the app.
      *           Then as it's the same block header, proof won't be created and it won't be sent to the pool server.
      * Test Conditions:
@@ -176,9 +182,9 @@ class ProxyControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injecti
      */
     "return 200 status code with same header" in {
       val msg: String = "First_msg"
-      node.Servlets.msg = msg
-      pool.Servlets.gotProof = false
-      node.Servlets.proofCreated = false
+      NodeServlets.msg = msg
+      PoolServerServlets.gotProof = false
+      NodeServlets.proofCreated = false
       val response = route(app, FakeRequest(GET, "/mining/candidate")).get
 
       val bodyCheck: String =
@@ -193,13 +199,13 @@ class ProxyControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injecti
       status(response) mustBe OK
       contentType(response) mustBe Some("application/json")
       contentAsString(response).replaceAll("\\s", "") must include (bodyCheck)
-      pool.Servlets.gotProof mustBe false
-      node.Servlets.proofCreated mustBe false
+      PoolServerServlets.gotProof mustBe false
+      NodeServlets.proofCreated mustBe false
     }
 
     /**
      * Purpose: Check existing proof will be sent to the pool server and it would not be created again
-     * Prerequisites: Check test node and test pool server connections in test.conf .
+     * Prerequisites: Check test node and test pool server connections in test.conf.
      * Scenario: It sends a fake GET request to `/mining/candidate` and passes it to the app.
      *           Then as it's a new block header but proof exists, the proof will be sent to the pool server without being created again.
      * Test Conditions:
@@ -212,8 +218,8 @@ class ProxyControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injecti
      */
     "return 200 status code with new header but existing proof" in {
       val msg: String = "Second_msg"
-      node.Servlets.msg = msg
-      node.Servlets.proofCreated = false
+      NodeServlets.msg = msg
+      NodeServlets.proofCreated = false
       val response = route(app, FakeRequest(GET, "/mining/candidate")).get
 
       val bodyCheck: String =
@@ -228,8 +234,8 @@ class ProxyControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injecti
       status(response) mustBe OK
       contentType(response) mustBe Some("application/json")
       contentAsString(response).replaceAll("\\s", "") must include (bodyCheck)
-      pool.Servlets.gotProof mustBe true
-      node.Servlets.proofCreated mustBe false
+      PoolServerServlets.gotProof mustBe true
+      NodeServlets.proofCreated mustBe false
     }
   }
 
@@ -238,7 +244,7 @@ class ProxyControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injecti
 
     /**
      * Purpose: Check if share will be sent to the pool server.
-     * Prerequisites: Check test node and test pool server connections in test.conf .
+     * Prerequisites: Check test node and test pool server connections in test.conf.
      * Scenario: It sends a fake POST request to `/mining/share` to the app.
      * Test Conditions:
      * * status is `200`
