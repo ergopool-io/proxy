@@ -93,10 +93,10 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
    * Send a request to a url with its all headers and body
    * 
    * @param url [[String]] Servers url
-   * @param request [[Request[AnyContent]]] The request to send
+   * @param request [[Request[RawBuffer]]] The request to send
    * @return [[HttpResponse]] Response from the server
    */ 
-  private def sendRequest(url: String, request: Request[AnyContent]): HttpResponse[Array[Byte]] = {
+  private def sendRequest(url: String, request: Request[RawBuffer]): HttpResponse[Array[Byte]] = {
     // Prepare the request headers
     val reqHeaders: Seq[(String, String)] = request.headers.headers
 
@@ -106,15 +106,7 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
         Http(url).headers(reqHeaders).asBytes
       }
       else {
-        request.body match {
-          case t: AnyContentAsJson =>
-            Http(url).headers(reqHeaders).postData(play.api.libs.json.Json.toBytes(request.body.asJson.get)).asBytes
-          case _ =>
-            // Prepare the request body
-            val body: String = request.body.toString
-
-            Http(url).headers(reqHeaders).postData(body).asBytes
-        }
+        Http(url).headers(reqHeaders).postData(Helper.ConvertRaw(request.body).toString).asBytes
       }
     }
     response
@@ -261,10 +253,10 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
   /**
    * Returns the response of the clients requests from the node
    *
-   * @param request [[Request[AnyContent]]] The request to send
+   * @param request [[Request[RawBuffer]]] The request to send
    * @return [[ProxyResponse]] Response from the node
    */
-  private def proxy(request: Request[AnyContent], config: Configuration = this.config, connection: String = this.nodeConnection): ProxyResponse = {
+  private def proxy(request: Request[RawBuffer], config: Configuration = this.config, connection: String = this.nodeConnection): ProxyResponse = {
 
     // Log the request
 //    logger.logRequest(request)
@@ -284,7 +276,7 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
    *
    * @return [[Result]] Response from the node
    */
-  def proxyPass(): Action[AnyContent] = Action { implicit request: Request[AnyContent] =>
+  def proxyPass(): Action[RawBuffer] = Action(parse.raw) { implicit request: Request[RawBuffer] =>
 
     // Send the request to node and get its response
     val response: ProxyResponse = this.proxy(request)
@@ -385,7 +377,7 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
    *
    * @return [[Result]] Response from the node with the key "pb"
    */
-  def getMiningCandidate: Action[AnyContent] = Action { implicit request: Request[AnyContent] =>
+  def getMiningCandidate: Action[RawBuffer] = Action(parse.raw) { implicit request: Request[RawBuffer] =>
     if (poolConfigCompleted) {
       if (!this.genTransactionInProcess) {
         // Log the request
