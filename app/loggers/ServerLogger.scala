@@ -4,6 +4,7 @@ import play.api.mvc._
 import play.api.Logger
 import scalaj.http.HttpResponse
 import com.typesafe.config.ConfigFactory
+import helpers.Helper
 import io.circe.syntax._
 import io.circe.parser.parse
 import io.circe.Json
@@ -20,16 +21,16 @@ class ServerLogger {
    * 
    * @param request [[Request[AnyContent]]] The request that should be logged
    */ 
-  def logRequest(request: Request[AnyContent]): Unit = {
+  def logRequest(request: Request[RawBuffer]): Unit = {
 
     // Remove body or convert it to String if it's not in Json format
     val body: Json = {
       try {
-        parse(request.body.toString).getOrElse(Json.Null)
+        Helper.ConvertRaw(request.body).toJson
       } catch {
         case _: Throwable =>
           if (this.logNotJsonBody) {
-            parse(request.body.toString).getOrElse(Json.Null)
+            parse(Helper.ConvertRaw(request.body).toString).getOrElse(Json.Null)
           }
           else {
             "<Body is removed due to config>".asJson
