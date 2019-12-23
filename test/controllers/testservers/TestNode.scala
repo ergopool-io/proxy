@@ -20,6 +20,7 @@ class TestNode(port: Int) extends TestJettyServer {
   handler.addServletWithMapping(classOf[NodeServlets.MiningSolutionServlet], "/mining/solution")
   handler.addServletWithMapping(classOf[NodeServlets.MiningCandidateWithTxsServlet], "/mining/candidateWithTxs")
   handler.addServletWithMapping(classOf[NodeServlets.WalletTransactionGenerateServlet], "/wallet/transaction/generate")
+  handler.addServletWithMapping(classOf[NodeServlets.SwaggerConfigServlet], "/api-docs/swagger.conf")
 }
 
 object NodeServlets {
@@ -207,6 +208,160 @@ object NodeServlets {
             |}
             |""".stripMargin)
       }
+    }
+  }
+
+  class SwaggerConfigServlet extends HttpServlet {
+    override protected def doGet(req: HttpServletRequest, resp: HttpServletResponse): Unit = {
+      val testSwaggerConfig: String =
+        """
+          |openapi: "3.0.2"
+          |
+          |info:
+          |  version: "3.1.2"
+          |  title: Ergo Node API
+          |  description: API docs for Ergo Node. Models are shared between all Ergo products
+          |  contact:
+          |    name: Ergo Platform Team
+          |    email: ergoplatform@protonmail.com
+          |    url: https://ergoplatform.org
+          |  license:
+          |    name: CC0 1.0 Universal
+          |    url: https://raw.githubusercontent.com/ergoplatform/ergo/master/LICENSE
+          |
+          |components:
+          |  securitySchemes:
+          |    ApiKeyAuth:
+          |      type: apiKey
+          |      in: header
+          |      name: api_key
+          |
+          |  schemas:
+          |    # Objects
+          |    ExternalCandidateBlock:
+          |      description: Candidate block info for external miner
+          |      type: object
+          |      required:
+          |      - msg
+          |      - b
+          |      - pk
+          |      - pb
+          |      properties:
+          |        msg:
+          |          type: string
+          |          description: Base16-encoded block bytes without pow
+          |          example: '0350e25cee8562697d55275c96bb01b34228f9bd68fd9933f2a25ff195526864f5'
+          |        b:
+          |          type: integer
+          |          example: 987654321
+          |        b:
+          |          type: integer
+          |          example: 9876543210
+          |        pk:
+          |          type: string
+          |          description: Base16-encoded public key
+          |          example: '0350e25cee8562697d55275c96bb01b34228f9bd68fd9933f2a25ff195526864f5'
+          |
+          |    ApiError:
+          |      type: object
+          |      required:
+          |      - error
+          |      - reason
+          |      - detail
+          |      properties:
+          |        error:
+          |          type: integer
+          |          description: Error code
+          |          example: 500
+          |        reason:
+          |          type: string
+          |          description: String error code
+          |          example: 'Internal server error'
+          |        detail:
+          |          type: string
+          |          nullable: true
+          |          description: Detailed error description
+          |
+          |paths:
+          |  /mining/candidate:
+          |    get:
+          |      security:
+          |        - ApiKeyAuth: [api_key]
+          |      summary: Request block candidate
+          |      operationId: miningRequestBlockCandidate
+          |      tags:
+          |        - mining
+          |      responses:
+          |        '200':
+          |          description: External candidate
+          |          content:
+          |            application/json:
+          |              schema:
+          |                $ref: '#/components/schemas/ExternalCandidateBlock'
+          |        default:
+          |          description: Error
+          |          content:
+          |            application/json:
+          |              schema:
+          |                $ref: '#/components/schemas/ApiError'
+          |
+          |  /mining/rewardAddress:
+          |    get:
+          |      security:
+          |        - ApiKeyAuth: [api_key]
+          |      summary: Read miner reward address
+          |      operationId: miningReadMinerRewardAddress
+          |      tags:
+          |        - mining
+          |      responses:
+          |        '200':
+          |          description: External candidate
+          |          content:
+          |            application/json:
+          |              schema:
+          |                type: object
+          |                required:
+          |                  - rewardAddress
+          |        default:
+          |          description: Error
+          |          content:
+          |            application/json:
+          |              schema:
+          |                $ref: '#/components/schemas/ApiError'
+          |
+          |  /mining/solution:
+          |    post:
+          |      security:
+          |        - ApiKeyAuth: [api_key]
+          |      summary: Submit solution for current candidate
+          |      operationId: miningSubmitSolution
+          |      tags:
+          |        - mining
+          |      requestBody:
+          |        required: true
+          |        content:
+          |          application/json:
+          |            schema:
+          |              $ref: '#/components/schemas/PowSolutions'
+          |      responses:
+          |        '200':
+          |          description: Solution is valid
+          |        '400':
+          |          description: Solution is invalid
+          |          content:
+          |            application/json:
+          |              schema:
+          |                $ref: '#/components/schemas/ApiError'
+          |        default:
+          |          description: Error
+          |          content:
+          |            application/json:
+          |              schema:
+          |                $ref: '#/components/schemas/ApiError'
+          |""".stripMargin
+      resp.setContentType("application/json")
+      resp.setStatus(HttpServletResponse.SC_OK)
+      resp.getWriter.print(testSwaggerConfig)
     }
   }
 }

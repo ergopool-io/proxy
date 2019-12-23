@@ -25,6 +25,8 @@ libraryDependencies ++= Seq(
   "org.eclipse.jetty" % "jetty-server" % "9.4.24.v20191120"
 )
 
+libraryDependencies += "io.swagger.parser.v3" % "swagger-parser-v3" % "2.0.16"
+
 // Assembly build plugin
 mainClass in assembly := Some("play.core.server.ProdServerStart")
 fullClasspath in assembly += Attributed.blank(PlayKeys.playPackageAssets.value)

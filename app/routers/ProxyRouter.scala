@@ -23,7 +23,10 @@ class ProxyRouter @Inject()(controller: ProxyController) extends SimpleRouter {
 
     case GET(p"/mining/candidate") =>
       controller.getMiningCandidate()
-      
+
+    case GET(p"/api-docs/swagger.conf") =>
+      controller.swagger()
+
     case GET(p"/$path*") =>
       controller.proxyPass()
 
