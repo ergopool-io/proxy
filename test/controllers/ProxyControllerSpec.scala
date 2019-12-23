@@ -269,4 +269,197 @@ class ProxyControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injecti
       contentAsString(response) must include ("{\"success\": true}")
     }
   }
+
+  /** Check share requests */
+  "ProxyController Swagger" should {
+
+    /**
+     * Purpose: Check new swagger config.
+     * Prerequisites: Check test node and test pool server connections in test.conf.
+     * Scenario: It sends a fake GET request to `/api-docs/swagger.conf` to the app.
+     * Test Conditions:
+     * * status is `200`
+     * * Content-Type is `application/json`
+     * * Content had /mining/share and pb in /mining/candidate
+     */
+    "return change swagger config" in {
+      val fakeRequest = FakeRequest(GET, "/api-docs/swagger.conf")
+      val response = route(app, fakeRequest).get
+
+      status(response) mustBe OK
+      contentType(response) mustBe Some("application/json")
+      contentAsString(response) must include
+      """
+        |openapi: 3.0.2
+        |info:
+        |  title: Ergo Node API
+        |  description: API docs for Ergo Node. Models are shared between all Ergo products
+        |  contact:
+        |    name: Ergo Platform Team
+        |    url: https://ergoplatform.org
+        |    email: ergoplatform@protonmail.com
+        |  license:
+        |    name: CC0 1.0 Universal
+        |    url: https://raw.githubusercontent.com/ergoplatform/ergo/master/LICENSE
+        |  version: 3.1.2
+        |servers:
+        |- url: /
+        |paths:
+        |  /mining/candidate:
+        |    get:
+        |      tags:
+        |      - mining
+        |      summary: Request block candidate
+        |      operationId: miningRequestBlockCandidate
+        |      responses:
+        |        "200":
+        |          description: External candidate
+        |          content:
+        |            application/json:
+        |              schema:
+        |                $ref: '#/components/schemas/ExternalCandidateBlock'
+        |        default:
+        |          description: Error
+        |          content:
+        |            application/json:
+        |              schema:
+        |                $ref: '#/components/schemas/ApiError'
+        |      security:
+        |      - ApiKeyAuth:
+        |        - api_key
+        |  /mining/rewardAddress:
+        |    get:
+        |      tags:
+        |      - mining
+        |      summary: Read miner reward address
+        |      operationId: miningReadMinerRewardAddress
+        |      responses:
+        |        "200":
+        |          description: External candidate
+        |          content:
+        |            application/json:
+        |              schema:
+        |                required:
+        |                - rewardAddress
+        |                type: object
+        |        default:
+        |          description: Error
+        |          content:
+        |            application/json:
+        |              schema:
+        |                $ref: '#/components/schemas/ApiError'
+        |      security:
+        |      - ApiKeyAuth:
+        |        - api_key
+        |  /mining/share:
+        |    post:
+        |      tags:
+        |      - mining
+        |      summary: Submit share for current candidate
+        |      requestBody:
+        |        content:
+        |          application/json:
+        |            schema:
+        |              $ref: '#/components/schemas/PowSolutions'
+        |        required: true
+        |      responses:
+        |        "200":
+        |          description: Share is valid
+        |        "500":
+        |          description: Error
+        |          content:
+        |            application/json:
+        |              schema:
+        |                $ref: '#/components/schemas/ApiError'
+        |        default:
+        |          description: Error
+        |          content:
+        |            application/json:
+        |              schema:
+        |                $ref: '#/components/schemas/ApiError'
+        |      security:
+        |      - ApiKeyAuth:
+        |        - '[api_key]'
+        |  /mining/solution:
+        |    post:
+        |      tags:
+        |      - mining
+        |      summary: Submit solution for current candidate
+        |      operationId: miningSubmitSolution
+        |      requestBody:
+        |        content:
+        |          application/json:
+        |            schema:
+        |              $ref: '#/components/schemas/PowSolutions'
+        |        required: true
+        |      responses:
+        |        "200":
+        |          description: Solution is valid
+        |        "400":
+        |          description: Solution is invalid
+        |          content:
+        |            application/json:
+        |              schema:
+        |                $ref: '#/components/schemas/ApiError'
+        |        default:
+        |          description: Error
+        |          content:
+        |            application/json:
+        |              schema:
+        |                $ref: '#/components/schemas/ApiError'
+        |      security:
+        |      - ApiKeyAuth:
+        |        - api_key
+        |components:
+        |  schemas:
+        |    ExternalCandidateBlock:
+        |      required:
+        |      - b
+        |      - msg
+        |      - pb
+        |      - pk
+        |      type: object
+        |      properties:
+        |        msg:
+        |          type: string
+        |          description: Base16-encoded block bytes without pow
+        |          example: 0350e25cee8562697d55275c96bb01b34228f9bd68fd9933f2a25ff195526864f5
+        |        b:
+        |          type: integer
+        |          example: 9876543210
+        |        pk:
+        |          type: string
+        |          description: Base16-encoded public key
+        |          example: 0350e25cee8562697d55275c96bb01b34228f9bd68fd9933f2a25ff195526864f5
+        |        pb:
+        |          type: Integer
+        |          example: 9876543210
+        |      description: Candidate block info for external miner
+        |    ApiError:
+        |      required:
+        |      - detail
+        |      - error
+        |      - reason
+        |      type: object
+        |      properties:
+        |        error:
+        |          type: integer
+        |          description: Error code
+        |          example: 500
+        |        reason:
+        |          type: string
+        |          description: String error code
+        |          example: Internal server error
+        |        detail:
+        |          type: string
+        |          description: Detailed error description
+        |          nullable: true
+        |  securitySchemes:
+        |    ApiKeyAuth:
+        |      type: apiKey
+        |      name: api_key
+        |      in: header
+        |""".stripMargin
+    }
+  }
 }

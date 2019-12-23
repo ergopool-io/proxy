@@ -9,6 +9,13 @@ import play.api.http.HttpEntity
 import scalaj.http.{Http, HttpResponse}
 import akka.util.ByteString
 import io.circe.{ACursor, HCursor, Json}
+import io.swagger.v3.oas.models.media.{Content, MediaType, Schema}
+import io.swagger.v3.oas.models.responses.{ApiResponse, ApiResponses}
+import io.swagger.v3.oas.models.security.SecurityRequirement
+import io.swagger.v3.parser.OpenAPIV3Parser
+import io.swagger.v3.oas.models.{OpenAPI, Operation, PathItem, Paths}
+import io.swagger.v3.core.util.Yaml
+
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 import scala.math.BigDecimal
@@ -281,9 +288,15 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
     // Send the request to node and get its response
     val response: ProxyResponse = this.proxy(request)
 
+    val contentType = {
+      if (response.contentType == "")
+        "plain/text"
+      else
+        response.contentType
+    }
     Result(
       header = ResponseHeader(response.statusCode, response.headers),
-      body = HttpEntity.Strict(ByteString(response.body), Some(response.contentType))
+      body = HttpEntity.Strict(ByteString(response.body), Some(contentType))
     )
   }
 
@@ -512,5 +525,94 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
             |""".stripMargin.map(_.toByte)), Some("application/json"))
       )
     }
+  }
+
+  /**
+   * Change swagger config to show pool routes
+   * @return [[Result]] new swagger config
+   */
+  def swagger: Action[RawBuffer] = Action(parse.raw) { implicit request: Request[RawBuffer] =>
+    val openApi: OpenAPI = new OpenAPIV3Parser().read(s"${this.nodeConnection}/api-docs/swagger.conf")
+
+    // Add pb in /mining/candidate
+    val pbSchema = new Schema()
+    pbSchema.setType("Integer")
+    pbSchema.setExample(9876543210L)
+    openApi.getComponents.getSchemas.get("ExternalCandidateBlock").addProperties("pb", pbSchema)
+
+    // Add /mining/share
+
+    val response200: ApiResponse = {
+      val response = new ApiResponse
+      response.setDescription("Share is valid")
+      response
+    }
+
+    val response500: ApiResponse = {
+      val response = new ApiResponse
+      response.setDescription("Share is invalid")
+
+      val schema: Schema[_] = new Schema()
+      schema.set$ref("#/components/schemas/ApiError")
+
+      val mediaType: MediaType = new MediaType
+      mediaType.setSchema(schema)
+
+      val content: Content = new Content
+      content.addMediaType("application/json", mediaType)
+
+      response.setContent(content)
+
+      response
+    }
+
+    // Put 200 and 500 in responses
+    val APIResponses: ApiResponses = {
+      val responses = new ApiResponses
+
+      responses.addApiResponse("200", response200)
+      responses.addApiResponse("500", response500)
+
+      response500.setDescription("Error")
+      responses.setDefault(response500)
+
+      responses
+    }
+
+    // Create a post operation
+    val postOperation: Operation = {
+      val security = new SecurityRequirement
+      security.addList("ApiKeyAuth", "[api_key]")
+
+      val op = new Operation
+      op.addSecurityItem(security)
+      op.setSummary("Submit share for current candidate")
+      op.addTagsItem("mining")
+      op.setRequestBody(openApi.getPaths.get("/mining/solution").getPost.getRequestBody)
+      op.setResponses(APIResponses)
+
+      op
+    }
+
+    // Add post Operation to paths
+    val path: PathItem = new PathItem
+    path.setPost(postOperation)
+
+    // Reformat paths of openAPI
+    val newPaths = new Paths
+    openApi.getPaths.forEach({
+      case (pathName, pathValue) =>
+        newPaths.addPathItem(pathName, pathValue)
+        if (pathName == "/mining/rewardAddress")
+          newPaths.addPathItem("/mining/share", path)
+    })
+    openApi.setPaths(newPaths)
+
+    val yaml = Yaml.pretty(openApi)
+
+    Result(
+      header = ResponseHeader(200),
+      body = HttpEntity.Strict(ByteString(yaml), Some("application/json"))
+    )
   }
 }
