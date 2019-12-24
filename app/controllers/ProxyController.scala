@@ -15,7 +15,6 @@ import io.swagger.v3.oas.models.security.SecurityRequirement
 import io.swagger.v3.parser.OpenAPIV3Parser
 import io.swagger.v3.oas.models.{OpenAPI, Operation, PathItem, Paths}
 import io.swagger.v3.core.util.Yaml
-
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 import scala.math.BigDecimal
@@ -55,8 +54,7 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
   // Api Key
   private[this] val apiKey: String = Helper.readConfig(config, "node.api_key")
 
-  // True if getting config from the pool was successful
-  private[this] var poolConfigCompleted: Boolean = false
+  private[this] var miningDisabled: Boolean = false
 
   // Pool config
   private[this] var walletAddress: String = ""
@@ -65,15 +63,18 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
 
   Future[Unit] {
     var poolConfig: HCursor = Json.Null.hcursor
-    while (!this.poolConfigCompleted) {
+    var poolConfigCompleted: Boolean = false
+    while (!poolConfigCompleted) {
       val response: HCursor = {
         try {
           val response = Http(s"${this.poolConnection}${this.poolServerConfigRoute}").asBytes
           poolConfigCompleted = true
+          ProxyStatus.setStatus(ProxyStatus.GREEN)
           Helper.convertBodyToJson(response.body).hcursor
         } catch {
           case error: Throwable =>
             logger.logger.error(error.getMessage)
+            ProxyStatus.setStatus(ProxyStatus.RED, s"Error getting config from the pool: ${error.getMessage}")
             Thread.sleep(5000)
             Json.Null.hcursor
         }
@@ -94,7 +95,41 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
    * @param body [[Array[Byte]]] The body of the response
    * @param contentType [[String]] The content type of the response
    */
-  case class ProxyResponse(statusCode: Int, headers: Map[String, String],var body: Array[Byte], contentType: String)
+  case class ProxyResponse(statusCode: Int, headers: Map[String, String], var body: Array[Byte], contentType: String)
+
+  /**
+   * Exception for events that mining should be disabled
+   * @param message [[String]] reason of being disabled
+   */
+  final class MiningDisabledException(message: String) extends Throwable("Mining has been disabled") {
+    miningDisabled = true
+    ProxyStatus.setStatus(ProxyStatus.RED, message)
+  }
+
+  /**
+   * Contains proxy status
+   */
+  private object ProxyStatus {
+    val GREEN: Boolean = true
+    val RED: Boolean = false
+
+    private var health: Boolean = RED
+    private var reason: String = "Starting Proxy"
+
+    def setStatus(health: Boolean, reason: String = ""): Unit = {
+      this.health = health
+      this.reason = reason
+    }
+
+    override def toString: String = {
+      s"""
+        |{
+        |   "health": ${if (this.health) "\"GREEN\"" else "\"RED\","}
+        |   ${if (!this.health) "\"reason\": \"" + this.reason + "\"" else ""}
+        |}
+        |""".stripMargin
+    }
+  }
 
   /**
    * Send a request to a url with its all headers and body
@@ -197,12 +232,13 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
       val generatedTransaction: HttpResponse[Array[Byte]] = Http(s"${this.nodeConnection}/wallet/transaction/generate").headers(reqHeaders).postData(transactionGenerateBody).asBytes
       val transaction = generatedTransaction.body.map(_.toChar).mkString
 
-      // Exit application if transaction is not OK
+      // Disable mining routes if transaction is not OK
       if (!generatedTransaction.isCodeInRange(200, 299)) {
         logger.logResponse(generatedTransaction)
         logger.logger.error(generatedTransaction.body.toString)
-        sys.exit(1)
+        throw new MiningDisabledException(s"Route /wallet/transaction/generate failed with error code ${generatedTransaction.code}")
       }
+
       val generatedTransactionResponseBody: String =
         s"""
           |{
@@ -210,7 +246,6 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
           |   "transaction": $transaction
           |}
           |""".stripMargin
-
 
       // Send generated transaction to the pool server
       Http(s"${this.poolConnection}${this.poolServerGeneratedTransactionRoute}").headers(Seq(("Content-Type", "application/json"))).postData(generatedTransactionResponseBody).asBytes
@@ -233,10 +268,12 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
 
       response
     } catch {
+      case error: MiningDisabledException =>
+        throw error
       case error: Throwable =>
         this.logger.logger.error(error.getMessage)
         this.genTransactionInProcess = false
-        Json.Null
+        throw new MiningDisabledException(s"Creating proof failed: ${error.getMessage}")
     }
   }
 
@@ -306,7 +343,7 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
    * @return [[Result]] Response from the node
    */
   def solution(): Action[RawBuffer] = Action(parse.raw) { implicit request: Request[RawBuffer] =>
-    if (poolConfigCompleted) {
+    if (!miningDisabled) {
       if (!this.lastPoolProofWasSuccess) sendProofToPool()
 
       // Prepare the request headers
@@ -361,7 +398,7 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
             |{
             |   "error": 500,
             |   "reason": "Internal Server Error",
-            |   "detail": "Can not read config from the pool"
+            |   "detail": "Proxy status is RED"
             |}
             |""".stripMargin.map(_.toByte)), Some("application/json"))
       )
@@ -391,7 +428,7 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
    * @return [[Result]] Response from the node with the key "pb"
    */
   def getMiningCandidate: Action[RawBuffer] = Action(parse.raw) { implicit request: Request[RawBuffer] =>
-    if (poolConfigCompleted) {
+    if (!miningDisabled) {
       if (!this.genTransactionInProcess) {
         // Log the request
         // logger.logRequest(request)
@@ -482,7 +519,7 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
    * @return [[Result]] Response from the pool server
    */
   def sendShare: Action[RawBuffer] = Action(parse.raw) { implicit request: Request[RawBuffer] =>
-    if (poolConfigCompleted) {
+    if (!miningDisabled) {
       if (!this.lastPoolProofWasSuccess) sendProofToPool()
 
       try {
@@ -613,6 +650,37 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
     Result(
       header = ResponseHeader(200),
       body = HttpEntity.Strict(ByteString(yaml), Some("application/json"))
+    )
+  }
+
+  /**
+   * Change /info to add proxy information
+   * @return [[Result]] new info
+   */
+  def changeInfo: Action[RawBuffer] = Action(parse.raw) { implicit request: Request[RawBuffer] =>
+    // Send the request to the node
+    val response: HttpResponse[Array[Byte]] = this.sendRequest(s"${this.nodeConnection}${request.uri}", request)
+
+    val respBody: Json = Helper.convertBodyToJson(response.body).deepMerge(io.circe.parser.parse(
+      s"""
+        |{
+        |   "proxy": {
+        |     "pool": {
+        |       "connection": "${this.nodeConnection}",
+        |       "config": {
+        |         "wallet": "${this.walletAddress}",
+        |         "difficulty_factor": ${this.poolDifficultyFactor},
+        |         "transaction_request_value": ${this.transactionRequestsValue}
+        |       }
+        |     },
+        |     "status": $ProxyStatus
+        |   }
+        |}
+        |""".stripMargin).getOrElse(Json.Null))
+
+    Result(
+      header = ResponseHeader(200),
+      body = HttpEntity.Strict(ByteString(respBody.toString()), Some("application/json"))
     )
   }
 }
