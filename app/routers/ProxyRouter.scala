@@ -24,6 +24,9 @@ class ProxyRouter @Inject()(controller: ProxyController) extends SimpleRouter {
     case GET(p"/mining/candidate") =>
       controller.getMiningCandidate()
 
+    case GET(p"/info") =>
+      controller.changeInfo()
+
     case GET(p"/api-docs/swagger.conf") =>
       controller.swagger()
 

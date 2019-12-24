@@ -270,7 +270,7 @@ class ProxyControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injecti
     }
   }
 
-  /** Check share requests */
+  /** Check swagger */
   "ProxyController Swagger" should {
 
     /**
@@ -461,5 +461,46 @@ class ProxyControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injecti
         |      in: header
         |""".stripMargin
     }
+  }
+
+  /** Check Info */
+  "ProxyController changeInfo" should {
+    val greenInfo: String =
+      """
+        |{
+        |  "proxy" : {
+        |    "pool" : {
+        |      "connection" : "http://localhost:9001",
+        |      "config" : {
+        |        "wallet" : "3WvrVTCPJ1keSdtqNL5ayzQ62MmTNz4Rxq7vsjcXgLJBwZkvHrGa",
+        |        "difficulty_factor" : 10.0,
+        |        "transaction_request_value" : 67500000000
+        |      }
+        |    },
+        |    "status" : {
+        |      "health" : "GREEN"
+        |    }
+        |  }
+        |}
+        |""".stripMargin.replaceAll("\\s", "")
+    /**
+     * Purpose: Check the proxy info is in /info.
+     * Prerequisites: Check test node and test pool server connections in test.conf.
+     * Scenario: It sends a fake GET request to `/info` to the app.
+     * Test Conditions:
+     * * status is `200`
+     * * Content-Type is `application/json`
+     * * Content has the proxy info
+     */
+    "return info with green proxy" in {
+      val fakeRequest = FakeRequest(GET, "/info")
+      val response = route(app, fakeRequest).get
+
+      status(response) mustBe OK
+      contentType(response) mustBe Some("application/json")
+      contentAsString(response).replaceAll("\\s", "") mustBe greenInfo
+    }
+
+    // TODO: check red status -> need status reset to be implemented
   }
 }

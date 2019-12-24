@@ -21,6 +21,7 @@ class TestNode(port: Int) extends TestJettyServer {
   handler.addServletWithMapping(classOf[NodeServlets.MiningCandidateWithTxsServlet], "/mining/candidateWithTxs")
   handler.addServletWithMapping(classOf[NodeServlets.WalletTransactionGenerateServlet], "/wallet/transaction/generate")
   handler.addServletWithMapping(classOf[NodeServlets.SwaggerConfigServlet], "/api-docs/swagger.conf")
+  handler.addServletWithMapping(classOf[NodeServlets.InfoServlet], "/info")
 }
 
 object NodeServlets {
@@ -362,6 +363,14 @@ object NodeServlets {
       resp.setContentType("application/json")
       resp.setStatus(HttpServletResponse.SC_OK)
       resp.getWriter.print(testSwaggerConfig)
+    }
+  }
+
+  class InfoServlet extends HttpServlet {
+    override protected def doGet(req: HttpServletRequest, resp: HttpServletResponse): Unit = {
+      resp.setContentType("application/json")
+      resp.setStatus(HttpServletResponse.SC_OK)
+      resp.getWriter.print("{}")
     }
   }
 }
