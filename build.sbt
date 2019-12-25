@@ -2,7 +2,7 @@ maintainer in Linux := "AmirHossein Bahrami <a.bahrami9675@gmail.com>"
 name := """ergo-proxy"""
 organization := "ergo"
 
-version := "0.1"
+version := "0.2"
 
 lazy val root = (project in file(".")).enablePlugins(PlayScala)
 
@@ -25,7 +25,7 @@ libraryDependencies ++= Seq(
   "org.eclipse.jetty" % "jetty-server" % "9.4.24.v20191120"
 )
 
-libraryDependencies += "io.swagger.parser.v3" % "swagger-parser-v3" % "2.0.16"
+libraryDependencies += "io.swagger.parser.v3" % "swagger-parser-v3" % "2.0.8"
 
 // Assembly build plugin
 mainClass in assembly := Some("play.core.server.ProdServerStart")
