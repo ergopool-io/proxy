@@ -1,17 +1,22 @@
 package controllers
 
+import akka.util.ByteString
 import com.typesafe.config.ConfigFactory
 import controllers.testservers.{NodeServlets, PoolServerServlets, TestNode, TestPoolServer}
 import helpers._
 import org.scalatestplus.play._
-import org.scalatestplus.play.guice._
 import play.api.test._
 import play.api.test.Helpers._
 import org.scalatest.BeforeAndAfterAll
 import play.api.Configuration
+import loggers.ServerLogger
+import play.api.libs.Files.SingletonTemporaryFileCreator
+import play.api.mvc.RawBuffer
 
-/** Check if proxy server would pass any POST or GET requests with their header and body with any route to that route of the specified node */ 
-class ProxyControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injecting with BeforeAndAfterAll {
+/**
+ * Check if proxy server would pass any POST or GET requests with their header and body with any route to that route of the specified node
+ */
+class ProxyControllerSpec extends PlaySpec with BeforeAndAfterAll {
   val config: Configuration = Configuration(ConfigFactory.load("test.conf"))
 
   val testNodeConnection: String = Helper.readConfig(config, "node.connection")
@@ -20,22 +25,26 @@ class ProxyControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injecti
   val node: TestNode = new TestNode(testNodeConnection.split(":").last.toInt)
   val pool: TestPoolServer = new TestPoolServer(testPoolServerConnection.split(":").last.toInt)
 
-  override def beforeAll(): Unit = {
-    node.startServer()
-    pool.startServer()
-    super.beforeAll()
-  }
+  node.startServer()
+  pool.startServer()
+
+  val controller: ProxyController = new ProxyController(stubControllerComponents())(config)(new ServerLogger)
 
   override def afterAll(): Unit = {
     node.stopServer()
+
+    PoolRequestQueue.resetQueue()
+    Thread.sleep(2000) // To get rid of request in the queues thread
+
     pool.stopServer()
+
     super.afterAll()
   }
 
   /** Check ordinary routes */
   "ProxyController proxyPass Ordinary Routes" should {
 
-    /** 
+    /**
      * Purpose: Check if proxy works on GET requests for ordinary routes.
      * Prerequisites: Check test node and test pool server connections in test.conf.
      * Scenario: It sends a fake GET request to `/test/proxy` of the app and checks if response is OK.
@@ -45,7 +54,8 @@ class ProxyControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injecti
      * * Content is `{"success": true}`
      */
     "return success for a get request" in {
-      val response = route(app, FakeRequest(GET, "/test/proxy")).get
+      val bytes: ByteString = ByteString("")
+      val response = controller.proxyPass.apply(FakeRequest(GET, "/test/proxy").withBody[RawBuffer](RawBuffer(bytes.size, SingletonTemporaryFileCreator, bytes)))
 
       status(response) mustBe OK
       contentType(response) mustBe Some("application/json")
@@ -62,7 +72,8 @@ class ProxyControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injecti
      * * Content is `{"success": true}`
      */
     "return success for a post request" in {
-      val response = route(app, FakeRequest(POST, "/test/proxy")).get
+      val bytes: ByteString = ByteString("")
+      val response = controller.proxyPass.apply(FakeRequest(POST, "/test/proxy").withBody[RawBuffer](RawBuffer(bytes.size, SingletonTemporaryFileCreator, bytes)))
 
       status(response) mustBe OK
       contentType(response) mustBe Some("application/json")
@@ -71,7 +82,7 @@ class ProxyControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injecti
   }
 
   /** Check solution requests */
-  "ProxyController solution" should {
+  "ProxyController sendSolution" should {
     /**
      * Purpose: Check solution won't be sent to pool server if status is 400.
      * Prerequisites: Check test node and test pool server connections in test.conf.
@@ -92,12 +103,13 @@ class ProxyControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injecti
           |  "d": 4196585670338033714759641235444284559441802073000000000000000000000000000000
           |}
           |""".stripMargin
-      val fakeRequest = FakeRequest(POST, "/mining/solution").withHeaders("api_key" -> "some string", "Content_type" -> "application/json").withBody[String](body)
-      val response = route(app, fakeRequest).get
+      val bytes: ByteString = ByteString(body)
+      val fakeRequest = FakeRequest(POST, "/mining/solution").withHeaders("api_key" -> "some string", "Content_type" -> "application/json").withBody[RawBuffer](RawBuffer(bytes.size, SingletonTemporaryFileCreator, bytes))
+      val response = controller.sendSolution.apply(fakeRequest)
 
       status(response) mustBe BAD_REQUEST
       contentType(response) mustBe Some("application/json")
-      PoolServerServlets.gotSolution mustBe false
+      PoolRequestQueue.isInQueue("/api/share.json/") mustBe false
     }
 
 
@@ -113,6 +125,8 @@ class ProxyControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injecti
      * * Content is `{"success": true}`
      */
     "return 200 status code on correct solution" in {
+      PoolRequestQueue.resetQueue()
+
       val body: String =
         """
           |{
@@ -122,13 +136,14 @@ class ProxyControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injecti
           |  "d": 4196585670338033714759641235444284559441802073009721710293850518130743229130
           |}
           |""".stripMargin
-      val fakeRequest = FakeRequest(POST, "/mining/solution").withHeaders("api_key" -> "some string", "Content_type" -> "application/json").withBody[String](body)
-      val response = route(app, fakeRequest).get
+      val bytes: ByteString = ByteString(body)
+      val fakeRequest = FakeRequest(POST, "/mining/solution").withHeaders("api_key" -> "some string", "Content_type" -> "application/json").withBody[RawBuffer](RawBuffer(bytes.size, SingletonTemporaryFileCreator, bytes))
+      val response = controller.sendSolution.apply(fakeRequest)
 
       status(response) mustBe OK
       contentType(response) mustBe Some("application/json")
       contentAsString(response) must include ("{\"success\": true}")
-      PoolServerServlets.gotSolution mustBe true
+      PoolRequestQueue.isInQueue("/api/share.json/") mustBe true
     }
   }
 
@@ -147,10 +162,15 @@ class ProxyControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injecti
      * * proof of TestNode must not be equal to "null" string
      */
     "return 200 status code with new header and generate proof" in {
+      PoolRequestQueue.resetQueue()
+
       val msg: String = "First_msg"
       NodeServlets.msg = msg
+
       NodeServlets.proof mustBe "null"
-      val response = route(app, FakeRequest(GET, "/mining/candidate")).get
+
+      val bytes: ByteString = ByteString("")
+      val response = controller.getMiningCandidate.apply(FakeRequest(GET, "/mining/candidate").withBody[RawBuffer](RawBuffer(bytes.size, SingletonTemporaryFileCreator, bytes)))
 
       val bodyCheck: String =
         s"""
@@ -161,6 +181,7 @@ class ProxyControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injecti
           |  "pb": 7480147235766783140410358772271136638792648494980143949776459870
           |}
           |""".stripMargin.replaceAll("\\s", "")
+
       status(response) mustBe OK
       contentType(response) mustBe Some("application/json")
       contentAsString(response).replaceAll("\\s", "") must include (bodyCheck)
@@ -181,11 +202,15 @@ class ProxyControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injecti
      * * proofCreated of the node must be false
      */
     "return 200 status code with same header" in {
+      PoolRequestQueue.resetQueue()
+
       val msg: String = "First_msg"
       NodeServlets.msg = msg
       PoolServerServlets.gotProof = false
       NodeServlets.proofCreated = false
-      val response = route(app, FakeRequest(GET, "/mining/candidate")).get
+
+      val bytes: ByteString = ByteString("")
+      val response = controller.getMiningCandidate.apply(FakeRequest(GET, "/mining/candidate").withBody[RawBuffer](RawBuffer(bytes.size, SingletonTemporaryFileCreator, bytes)))
 
       val bodyCheck: String =
         s"""
@@ -196,6 +221,7 @@ class ProxyControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injecti
           |  "pb": 7480147235766783140410358772271136638792648494980143949776459870
           |}
           |""".stripMargin.replaceAll("\\s", "")
+
       status(response) mustBe OK
       contentType(response) mustBe Some("application/json")
       contentAsString(response).replaceAll("\\s", "") must include (bodyCheck)
@@ -217,10 +243,15 @@ class ProxyControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injecti
      * * proofCreated of the node must be false
      */
     "return 200 status code with new header but existing proof" in {
+      PoolRequestQueue.resetQueue()
+
       val msg: String = "Second_msg"
       NodeServlets.msg = msg
+
       NodeServlets.proofCreated = false
-      val response = route(app, FakeRequest(GET, "/mining/candidate")).get
+
+      val bytes: ByteString = ByteString("")
+      val response = controller.getMiningCandidate.apply(FakeRequest(GET, "/mining/candidate").withBody[RawBuffer](RawBuffer(bytes.size, SingletonTemporaryFileCreator, bytes)))
 
       val bodyCheck: String =
         s"""
@@ -231,6 +262,7 @@ class ProxyControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injecti
           |  "pb": 7480147235766783140410358772271136638792648494980143949776459870
           |}
           |""".stripMargin.replaceAll("\\s", "")
+
       status(response) mustBe OK
       contentType(response) mustBe Some("application/json")
       contentAsString(response).replaceAll("\\s", "") must include (bodyCheck)
@@ -252,6 +284,8 @@ class ProxyControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injecti
      * * Content is `{"success":true}`
      */
     "return 200 status code from pool server on new share" in {
+      PoolRequestQueue.resetQueue()
+
       val body: String =
         """
           |{
@@ -261,17 +295,19 @@ class ProxyControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injecti
           |  "d": 4196585670338033714759641235444284559441802073009721710293850518130743229130
           |}
           |""".stripMargin
-      val fakeRequest = FakeRequest(POST, "/mining/solution").withHeaders("api_key" -> "some string", "Content_type" -> "application/json").withBody[String](body)
-      val response = route(app, fakeRequest).get
+      val bytes: ByteString = ByteString(body)
+      val fakeRequest = FakeRequest(POST, "/mining/share").withHeaders("api_key" -> "some string", "Content_type" -> "application/json").withBody[RawBuffer](RawBuffer(bytes.size, SingletonTemporaryFileCreator, bytes))
+      val response = controller.sendShare.apply(fakeRequest)
 
       status(response) mustBe OK
       contentType(response) mustBe Some("application/json")
-      contentAsString(response) must include ("{\"success\": true}")
+      contentAsString(response).replaceAll("\\s", "") must include ("{}")
+      PoolRequestQueue.isInQueue("/api/share.json/") mustBe true
     }
   }
 
   /** Check swagger */
-  "ProxyController Swagger" should {
+  "ProxyController changeSwagger" should {
 
     /**
      * Purpose: Check new swagger config.
@@ -283,8 +319,8 @@ class ProxyControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injecti
      * * Content had /mining/share and pb in /mining/candidate
      */
     "return change swagger config" in {
-      val fakeRequest = FakeRequest(GET, "/api-docs/swagger.conf")
-      val response = route(app, fakeRequest).get
+      val bytes: ByteString = ByteString("")
+      val response = controller.changeSwagger.apply(FakeRequest(GET, "/api-docs/swagger.conf").withBody[RawBuffer](RawBuffer(bytes.size, SingletonTemporaryFileCreator, bytes)))
 
       status(response) mustBe OK
       contentType(response) mustBe Some("application/json")
@@ -493,8 +529,8 @@ class ProxyControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injecti
      * * Content has the proxy info
      */
     "return info with green proxy" in {
-      val fakeRequest = FakeRequest(GET, "/info")
-      val response = route(app, fakeRequest).get
+      val bytes: ByteString = ByteString("")
+      val response = controller.changeInfo.apply(FakeRequest(GET, "/info").withBody[RawBuffer](RawBuffer(bytes.size, SingletonTemporaryFileCreator, bytes)))
 
       status(response) mustBe OK
       contentType(response) mustBe Some("application/json")

@@ -16,7 +16,7 @@ class ProxyRouter @Inject()(controller: ProxyController) extends SimpleRouter {
 
   override def routes: Routes = {
     case POST(p"/mining/solution") =>
-      controller.solution()
+      controller.sendSolution()
 
     case POST(p"/mining/share") =>
       controller.sendShare()
@@ -28,7 +28,7 @@ class ProxyRouter @Inject()(controller: ProxyController) extends SimpleRouter {
       controller.changeInfo()
 
     case GET(p"/api-docs/swagger.conf") =>
-      controller.swagger()
+      controller.changeSwagger()
 
     case GET(p"/$path*") =>
       controller.proxyPass()

@@ -16,9 +16,9 @@ class TestPoolServer(port: Int) extends TestJettyServer {
 
   server.setHandler(handler)
 
-  handler.addServletWithMapping(classOf[PoolServerServlets.TransactionServlet], "/api/transaction.json/")
   handler.addServletWithMapping(classOf[PoolServerServlets.ConfigServlet], "/api/config/value.json/")
-  handler.addServletWithMapping(classOf[PoolServerServlets.SolutionServlet], "/api/share.json/")
+  handler.addServletWithMapping(classOf[PoolServerServlets.TransactionServlet], "/api/transaction.json/")
+  handler.addServletWithMapping(classOf[PoolServerServlets.InternalServerErrorServlet], "/api/share.json/")
   handler.addServletWithMapping(classOf[PoolServerServlets.HeaderServlet], "/api/header.json/")
 }
 
@@ -30,14 +30,44 @@ object PoolServerServlets {
     val reqBodyCheck: String =
       """
         |{
-        |  "requests": [
-        |    {
-        |      "address": "3WvrVTCPJ1keSdtqNL5ayzQ62MmTNz4Rxq7vsjcXgLJBwZkvHrGa",
-        |      "value": 67500000000
+        |  "pk": "0278011ec0cf5feb92d61adb51dcb75876627ace6fd9446ab4cabc5313ab7b39a7",
+        |  "transaction": {
+        |      "id": "2ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117",
+        |      "inputs": [
+        |        {
+        |          "boxId": "1ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117",
+        |          "spendingProof": {
+        |            "proofBytes": "4ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd1173ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd1173ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117",
+        |            "extension": {
+        |              "1": "a2aed72ff1b139f35d1ad2938cb44c9848a34d4dcfd6d8ab717ebde40a7304f2541cf628ffc8b5c496e6161eba3f169c6dd440704b1719e0"
+        |            }
+        |          }
+        |        }
+        |      ],
+        |      "dataInputs": [
+        |        {
+        |          "boxId": "1ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117"
+        |        }
+        |      ],
+        |      "outputs": [
+        |        {
+        |          "boxId": "1ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117",
+        |          "value": 147,
+        |          "ergoTree": "0008cd0336100ef59ced80ba5f89c4178ebd57b6c1dd0f3d135ee1db9f62fc634d637041",
+        |          "creationHeight": 9149,
+        |          "assets": [
+        |            {
+        |              "tokenId": "4ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117",
+        |              "amount": 1000
+        |            }
+        |          ],
+        |          "additionalRegisters": {
+        |            "R4": "100204a00b08cd0336100ef59ced80ba5f89c4178ebd57b6c1dd0f3d135ee1db9f62fc634d637041ea02d192a39a8cc7a70173007301"
+        |          }
+        |        }
+        |      ],
+        |      "size": 0
         |    }
-        |  ],
-        |  "fee": 1000000,
-        |  "inputsRaw": []
         |}
         |""".stripMargin.replaceAll("\\s", "")
     override protected def doPost(request: HttpServletRequest, response: HttpServletResponse): Unit = {
@@ -118,6 +148,20 @@ object PoolServerServlets {
         response.setStatus(HttpServletResponse.SC_BAD_REQUEST)
         response.getWriter.print("{\"success\": false}")
       }
+    }
+  }
+
+  class InternalServerErrorServlet extends HttpServlet {
+    override protected def doPost(request: HttpServletRequest, response: HttpServletResponse): Unit = {
+      response.setContentType("application/json")
+      response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR)
+      response.getWriter.print("{}")
+    }
+
+    override protected def doGet(request: HttpServletRequest, response: HttpServletResponse): Unit = {
+      response.setContentType("application/json")
+      response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR)
+      response.getWriter.print("{}")
     }
   }
 }
