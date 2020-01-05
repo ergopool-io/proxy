@@ -423,7 +423,7 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
    * @return [[String]]
    */
   private def miningCandidateBody(cursor: HCursor): String = {
-    val b: BigDecimal = BigDecimal(cursor.downField("b").as[String].getOrElse("0"))
+    val b: BigDecimal = cursor.downField("b").as[BigDecimal].getOrElse(BigDecimal("0"))
     s"""
        |{
        |  "msg": "${cursor.downField("msg").as[String].getOrElse("")}",
@@ -473,6 +473,7 @@ class ProxyController @Inject()(cc: ControllerComponents)(config: Configuration)
                     respBody
                   }
                   else {
+                    PoolRequestQueue.unlock()
                     changeBlockHeader = false
                     body
                   }
