@@ -2,11 +2,11 @@ maintainer in Linux := "AmirHossein Bahrami <a.bahrami9675@gmail.com>"
 name := """ergo-proxy"""
 organization := "ergo"
 
-version := "0.1"
+version := "0.2"
 
 lazy val root = (project in file(".")).enablePlugins(PlayScala)
 
-scalaVersion := "2.13.0"
+scalaVersion := "2.13.1"
 
 libraryDependencies += guice
 libraryDependencies += "org.scalatestplus.play" %% "scalatestplus-play" % "4.0.3" % Test
@@ -19,6 +19,13 @@ libraryDependencies ++= Seq(
   "io.circe" %% "circe-generic",
   "io.circe" %% "circe-parser"
 ).map(_ % circeVersion)
+
+libraryDependencies ++= Seq(
+  "org.eclipse.jetty" % "jetty-servlet" % "9.4.24.v20191120",
+  "org.eclipse.jetty" % "jetty-server" % "9.4.24.v20191120"
+)
+
+libraryDependencies += "io.swagger.parser.v3" % "swagger-parser-v3" % "2.0.8"
 
 // Assembly build plugin
 mainClass in assembly := Some("play.core.server.ProdServerStart")
@@ -37,3 +44,5 @@ assemblyMergeStrategy in assembly := {
     val oldStrategy = (assemblyMergeStrategy in assembly).value
     oldStrategy(x)
 }
+
+javaOptions in Test += "-Dconfig.file=conf/test.conf"
