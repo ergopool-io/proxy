@@ -1,11 +1,11 @@
-package helpers
+package proxy
 
-import loggers.ServerLogger
+import proxy.loggers.Logger
 import scalaj.http.{Http, HttpResponse}
 
 import scala.collection.mutable
-import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Future
 
 /**
  * Request class
@@ -19,11 +19,10 @@ private case class Request(url: String, headers: Seq[(String, String)], body: St
  * Queue for sending pool request asynchronously
  * It tries to send each request in the queue until it's empty
  */
-class PoolRequestQueue {
+class PoolQueue {
 
   private val queue: mutable.Queue[Request] = mutable.Queue.empty
   private var _lock: Boolean = false
-  private val logger: ServerLogger = new ServerLogger
   private var isRunning: Boolean = false
 
   /**
@@ -79,7 +78,7 @@ class PoolRequestQueue {
         }
         catch {
           case e: Throwable =>
-            logger.logger.error("Error occurred when tried to send request to pool", e)
+            Logger.error("Error occurred when tried to send request to pool", e)
         }
       }
       this.isRunning = false
@@ -87,8 +86,8 @@ class PoolRequestQueue {
   }
 }
 
-object PoolRequestQueue {
-  var cls = new PoolRequestQueue
+object PoolQueue {
+  var cls = new PoolQueue
 
   /**
    * Add request to the queue
@@ -106,6 +105,9 @@ object PoolRequestQueue {
    */
   def isLock: Boolean = this.cls._lock
 
+  /**
+   * Lock the queue
+   */
   def lock(): Unit = {
     this.cls.lock()
   }
@@ -140,5 +142,13 @@ object PoolRequestQueue {
    */
   def isNonEmpty: Boolean = {
     this.cls.queue.nonEmpty
+  }
+
+  /**
+   * Wait until queue is empty
+   * sleep for 0.5s if is not
+   */
+  def waitUntilEmptied(): Unit = {
+    while (this.isNonEmpty) Thread.sleep(500)
   }
 }

@@ -12,3 +12,4 @@ target
 .DS_STORE
 .vscode
 ergo-proxy.iml
+*.log
