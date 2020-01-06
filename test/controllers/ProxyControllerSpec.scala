@@ -9,9 +9,9 @@ import play.api.test._
 import play.api.test.Helpers._
 import org.scalatest.BeforeAndAfterAll
 import play.api.Configuration
-import loggers.ServerLogger
 import play.api.libs.Files.SingletonTemporaryFileCreator
 import play.api.mvc.RawBuffer
+import proxy.PoolQueue
 
 /**
  * Check if proxy server would pass any POST or GET requests with their header and body with any route to that route of the specified node
@@ -28,12 +28,12 @@ class ProxyControllerSpec extends PlaySpec with BeforeAndAfterAll {
   node.startServer()
   pool.startServer()
 
-  val controller: ProxyController = new ProxyController(stubControllerComponents())(config)(new ServerLogger)
+  val controller: ProxyController = new ProxyController(stubControllerComponents())
 
   override def afterAll(): Unit = {
     node.stopServer()
 
-    PoolRequestQueue.resetQueue()
+    PoolQueue.resetQueue()
     Thread.sleep(2000) // To get rid of request in the queues thread
 
     pool.stopServer()
@@ -105,11 +105,11 @@ class ProxyControllerSpec extends PlaySpec with BeforeAndAfterAll {
           |""".stripMargin
       val bytes: ByteString = ByteString(body)
       val fakeRequest = FakeRequest(POST, "/mining/solution").withHeaders("api_key" -> "some string", "Content_type" -> "application/json").withBody[RawBuffer](RawBuffer(bytes.size, SingletonTemporaryFileCreator, bytes))
-      val response = controller.sendSolution.apply(fakeRequest)
+      val response = controller.sendSolution.action.apply(fakeRequest)
 
       status(response) mustBe BAD_REQUEST
       contentType(response) mustBe Some("application/json")
-      PoolRequestQueue.isInQueue("/api/share.json/") mustBe false
+      PoolQueue.isInQueue("/api/share.json/") mustBe false
     }
 
 
@@ -125,7 +125,7 @@ class ProxyControllerSpec extends PlaySpec with BeforeAndAfterAll {
      * * Content is `{"success": true}`
      */
     "return 200 status code on correct solution" in {
-      PoolRequestQueue.resetQueue()
+      PoolQueue.resetQueue()
 
       val body: String =
         """
@@ -138,12 +138,12 @@ class ProxyControllerSpec extends PlaySpec with BeforeAndAfterAll {
           |""".stripMargin
       val bytes: ByteString = ByteString(body)
       val fakeRequest = FakeRequest(POST, "/mining/solution").withHeaders("api_key" -> "some string", "Content_type" -> "application/json").withBody[RawBuffer](RawBuffer(bytes.size, SingletonTemporaryFileCreator, bytes))
-      val response = controller.sendSolution.apply(fakeRequest)
+      val response = controller.sendSolution.action.apply(fakeRequest)
 
       status(response) mustBe OK
       contentType(response) mustBe Some("application/json")
       contentAsString(response) must include ("{\"success\": true}")
-      PoolRequestQueue.isInQueue("/api/share.json/") mustBe true
+      PoolQueue.isInQueue("/api/share.json/") mustBe true
     }
   }
 
@@ -162,7 +162,7 @@ class ProxyControllerSpec extends PlaySpec with BeforeAndAfterAll {
      * * proof of TestNode must not be equal to "null" string
      */
     "return 200 status code with new header and generate proof" in {
-      PoolRequestQueue.resetQueue()
+      PoolQueue.resetQueue()
 
       val msg: String = "First_msg"
       NodeServlets.msg = msg
@@ -170,7 +170,7 @@ class ProxyControllerSpec extends PlaySpec with BeforeAndAfterAll {
       NodeServlets.proof mustBe "null"
 
       val bytes: ByteString = ByteString("")
-      val response = controller.getMiningCandidate.apply(FakeRequest(GET, "/mining/candidate").withBody[RawBuffer](RawBuffer(bytes.size, SingletonTemporaryFileCreator, bytes)))
+      val response = controller.getMiningCandidate.action.apply(FakeRequest(GET, "/mining/candidate").withBody[RawBuffer](RawBuffer(bytes.size, SingletonTemporaryFileCreator, bytes)))
 
       val bodyCheck: String =
         s"""
@@ -202,7 +202,7 @@ class ProxyControllerSpec extends PlaySpec with BeforeAndAfterAll {
      * * proofCreated of the node must be false
      */
     "return 200 status code with same header" in {
-      PoolRequestQueue.resetQueue()
+      PoolQueue.resetQueue()
 
       val msg: String = "First_msg"
       NodeServlets.msg = msg
@@ -210,7 +210,7 @@ class ProxyControllerSpec extends PlaySpec with BeforeAndAfterAll {
       NodeServlets.proofCreated = false
 
       val bytes: ByteString = ByteString("")
-      val response = controller.getMiningCandidate.apply(FakeRequest(GET, "/mining/candidate").withBody[RawBuffer](RawBuffer(bytes.size, SingletonTemporaryFileCreator, bytes)))
+      val response = controller.getMiningCandidate.action.apply(FakeRequest(GET, "/mining/candidate").withBody[RawBuffer](RawBuffer(bytes.size, SingletonTemporaryFileCreator, bytes)))
 
       val bodyCheck: String =
         s"""
@@ -243,7 +243,7 @@ class ProxyControllerSpec extends PlaySpec with BeforeAndAfterAll {
      * * proofCreated of the node must be false
      */
     "return 200 status code with new header but existing proof" in {
-      PoolRequestQueue.resetQueue()
+      PoolQueue.resetQueue()
 
       val msg: String = "Second_msg"
       NodeServlets.msg = msg
@@ -251,7 +251,7 @@ class ProxyControllerSpec extends PlaySpec with BeforeAndAfterAll {
       NodeServlets.proofCreated = false
 
       val bytes: ByteString = ByteString("")
-      val response = controller.getMiningCandidate.apply(FakeRequest(GET, "/mining/candidate").withBody[RawBuffer](RawBuffer(bytes.size, SingletonTemporaryFileCreator, bytes)))
+      val response = controller.getMiningCandidate.action.apply(FakeRequest(GET, "/mining/candidate").withBody[RawBuffer](RawBuffer(bytes.size, SingletonTemporaryFileCreator, bytes)))
 
       val bodyCheck: String =
         s"""
@@ -284,7 +284,7 @@ class ProxyControllerSpec extends PlaySpec with BeforeAndAfterAll {
      * * Content is `{"success":true}`
      */
     "return 200 status code from pool server on new share" in {
-      PoolRequestQueue.resetQueue()
+      PoolQueue.resetQueue()
 
       val body: String =
         """
@@ -297,12 +297,12 @@ class ProxyControllerSpec extends PlaySpec with BeforeAndAfterAll {
           |""".stripMargin
       val bytes: ByteString = ByteString(body)
       val fakeRequest = FakeRequest(POST, "/mining/share").withHeaders("api_key" -> "some string", "Content_type" -> "application/json").withBody[RawBuffer](RawBuffer(bytes.size, SingletonTemporaryFileCreator, bytes))
-      val response = controller.sendShare.apply(fakeRequest)
+      val response = controller.sendShare.action.apply(fakeRequest)
 
       status(response) mustBe OK
       contentType(response) mustBe Some("application/json")
       contentAsString(response).replaceAll("\\s", "") must include ("{}")
-      PoolRequestQueue.isInQueue("/api/share.json/") mustBe true
+      PoolQueue.isInQueue("/api/share.json/") mustBe true
     }
   }
 

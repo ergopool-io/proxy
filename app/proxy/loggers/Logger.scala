@@ -1,28 +1,26 @@
-package loggers
+package proxy.loggers
 
-import play.api.mvc._
-import play.api.Logger
-import scalaj.http.HttpResponse
 import com.typesafe.config.ConfigFactory
 import helpers.Helper
+import io.circe.Json
 import io.circe.syntax._
 import io.circe.parser.parse
-import io.circe.Json
+import play.api.mvc.{RawBuffer, Request}
+import scalaj.http.HttpResponse
 
-class ServerLogger {
+object Logger {
   // The logger object
-  val logger = Logger("proxy")
+  val logger = play.api.Logger("proxy")
 
   // Config for logging bodies that are not in Json format
   private val logNotJsonBody: Boolean = if (ConfigFactory.load().getString("play.logger.only_json") == "false") true else false
 
   /**
    * Log an http request
-   * 
+   *
    * @param request [[Request[AnyContent]]] The request that should be logged
-   */ 
+   */
   def logRequest(request: Request[RawBuffer]): Unit = {
-
     // Remove body or convert it to String if it's not in Json format
     val body: Json = {
       try {
@@ -37,7 +35,7 @@ class ServerLogger {
           }
       }
     }
-    
+
     val json = Json.obj(
       "method"  -> request.method.asJson,
       "path"    -> request.uri.asJson,
@@ -49,11 +47,10 @@ class ServerLogger {
 
   /**
    * Log an http response
-   * 
+   *
    * @param response [[HttpResponse[Array[Byte]] The response that should be logged
-   */ 
+   */
   def logResponse(response: HttpResponse[Array[Byte]]): Unit = {
-    
     // Remove body or convert it to String if it's not in Json format
     val body: Json = {
       try {
@@ -70,8 +67,27 @@ class ServerLogger {
     }
     val json = Json.obj(
       "body"    -> body,
-      "headers" -> response.headers.toMap.asJson,
+      "headers" -> response.headers.asJson,
     )
     this.logger.info(s"${json.noSpaces}")
+  }
+
+  /**
+   * Logs a message with the `ERROR` level.
+   *
+   * @param message the message to log
+   */
+  def error(message: => String): Unit = {
+    logger.error(message)
+  }
+
+  /**
+   * Logs a message with the `ERROR` level.
+   *
+   * @param message the message to log
+   * @param error the associated exception
+   */
+  def error(message: => String, error: => Throwable): Unit = {
+    logger.error(message, error)
   }
 }
