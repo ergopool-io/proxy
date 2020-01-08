@@ -30,6 +30,15 @@ class ProxyRouter @Inject()(controller: ProxyController) extends SimpleRouter {
     case GET(p"/api-docs/swagger.conf") =>
       controller.changeSwagger()
 
+    case POST(p"/config/reload") =>
+      controller.reloadConfig()
+
+    case POST(p"/status/reset") =>
+      controller.resetStatus()
+
+    case GET(p"/test") =>
+      controller.test()
+
     case GET(p"/$path*") =>
       controller.proxyPass()
 

@@ -9,8 +9,29 @@ import play.api.mvc.{RawBuffer, Request}
 import scalaj.http.HttpResponse
 
 object Logger {
+  class MessageSeq[T] {
+    private var seq: Seq[T] = Seq[T]()
+
+    def clear(): Unit = {
+      seq = Seq[T]()
+    }
+
+    def append(item: T): Unit = {
+      seq = seq :+ item
+    }
+
+    def isEmpty: Boolean = {
+      seq.isEmpty
+    }
+
+    def getMessages: Seq[T] = seq
+  }
+
   // The logger object
   val logger = play.api.Logger("proxy")
+
+  val messages: MessageSeq[String] = new MessageSeq[String]
+  var messagingEnabled: Boolean = false
 
   // Config for logging bodies that are not in Json format
   private val logNotJsonBody: Boolean = if (ConfigFactory.load().getString("play.logger.only_json") == "false") true else false
@@ -78,6 +99,8 @@ object Logger {
    * @param message the message to log
    */
   def error(message: => String): Unit = {
+    if (this.messagingEnabled)
+      this.messages.append(message)
     logger.error(message)
   }
 
@@ -88,6 +111,8 @@ object Logger {
    * @param error the associated exception
    */
   def error(message: => String, error: => Throwable): Unit = {
+    if (this.messagingEnabled)
+      this.messages.append(message)
     logger.error(message, error)
   }
 }

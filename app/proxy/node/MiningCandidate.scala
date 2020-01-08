@@ -23,7 +23,7 @@ class MiningCandidate(response: Response) {
     }
     catch {
       case error: ProxyStatus.PoolRequestException =>
-        Logger.error(error.getMessage)
+        Logger.error(s"MiningCandidate - ${error.getMessage}")
     }
     miningCandidateBody()
   }
@@ -54,7 +54,7 @@ class MiningCandidate(response: Response) {
     val cursor = responseBody.hcursor
 
     val header = cursor.downField("msg").as[String].getOrElse({
-      throw new Throwable("Can not read Key: \"msg\"")
+      throw new Throwable("Can not read Key = \"msg\"")
     })
     if (header != Config.blockHeader) {
       if (sendProofToPool())
@@ -93,7 +93,7 @@ class MiningCandidate(response: Response) {
 
     if (proof == "null") {
       val pk = cursor.downField("pk").as[String].getOrElse({
-        throw new Throwable("Can not read Key: \"pk\"")
+        throw new Throwable("Can not read Key = \"pk\"")
       })
 
       try {
@@ -102,7 +102,7 @@ class MiningCandidate(response: Response) {
       }
       catch {
         case error: Throwable =>
-          throw error
+          throw new Throwable(s"Creating proof failed (${error.getMessage})", error)
       }
       finally {
         Config.genTransactionInProcess = false
@@ -122,7 +122,7 @@ class MiningCandidate(response: Response) {
       val generatedTransaction: HttpResponse[Array[Byte]] = Node.generateTransaction()
 
       if (!generatedTransaction.isSuccess) {
-        Logger.error(Helper.getHttpResponseBody(generatedTransaction))
+        Logger.error(s"generateTransaction failed: ${Node.parseErrorResponse(generatedTransaction)}")
         throw new ProxyStatus.MiningDisabledException(s"Route /wallet/transaction/generate failed with error code ${generatedTransaction.code}")
       }
 
@@ -131,20 +131,24 @@ class MiningCandidate(response: Response) {
 
       if (transactionValidation.isSuccess) {
         val candidateWithTxsResponse = Node.candidateWithTxs(transaction)
-        if (candidateWithTxsResponse.isSuccess) resp = Response(candidateWithTxsResponse)
+        if (candidateWithTxsResponse.isSuccess)
+          resp = Response(candidateWithTxsResponse)
+        else
+          Logger.error(s"candidateWithTxs failed: ${Node.parseErrorResponse(candidateWithTxsResponse)}")
         Helper.convertBodyToJson(candidateWithTxsResponse.body).hcursor.downField("proof").as[Json].getOrElse(Json.Null)
       }
       else {
+        Logger.error(s"Transaction validation failed: ${Helper.getHttpResponseBody(transactionValidation)}")
         Json.Null
       }
     }
     catch {
       case error: ProxyStatus.MiningDisabledException =>
         PoolQueue.unlock()
-        throw error
+        throw new Throwable(s"Creating proof failed (${error.getMessage})", error)
       case error: Throwable =>
         PoolQueue.unlock()
-        Logger.error(error.getMessage)
+        Logger.error(s"Creating proof failed: ${error.getMessage}")
         throw new ProxyStatus.MiningDisabledException(s"Creating proof failed: ${error.getMessage}")
     }
   }

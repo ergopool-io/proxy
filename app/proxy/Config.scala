@@ -26,6 +26,7 @@ object Config {
   var walletAddress: String = ""
   var poolDifficultyFactor: BigDecimal = BigDecimal(0.0)
   var transactionRequestsValue: Long = 0
+  loadPoolConfig()
 
   // The current block header
   var blockHeader: String = ""
@@ -48,13 +49,15 @@ object Config {
   val poolServerConfigRoute: String = Helper.readConfig(config,"pool.route.config")
   val poolServerTransactionRoute: String = Helper.readConfig(config,"pool.route.new_transaction")
 
-  // Get pool configs
-  Future[Unit] {
-    val poolConfig: Json = Pool.config()
-    val cursor = poolConfig.hcursor
+  def loadPoolConfig(): Unit = {
+    // Get pool configs
+    Future[Unit] {
+      val poolConfig: Json = Pool.config()
+      val cursor = poolConfig.hcursor
 
-    this.walletAddress = cursor.downField("wallet_address").as[String].getOrElse("")
-    this.poolDifficultyFactor = BigDecimal(cursor.downField("pool_difficulty_factor").as[Double].getOrElse(0.0))
-    this.transactionRequestsValue = cursor.downField("reward").as[Long].getOrElse(0)
+      this.walletAddress = cursor.downField("wallet_address").as[String].getOrElse("")
+      this.poolDifficultyFactor = BigDecimal(cursor.downField("pool_difficulty_factor").as[Double].getOrElse(0.0))
+      this.transactionRequestsValue = cursor.downField("reward").as[Long].getOrElse(0)
+    }
   }
 }
