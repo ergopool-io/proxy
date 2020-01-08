@@ -87,6 +87,7 @@ object Pool {
    * @return [[Json]] the config from the pool server
    */
   def config(): Json = {
+    ProxyStatus.setStatus(StatusType.red, "Config", "Loading Pool Server Config")
     while (true) {
       try {
         val response = Http(s"${Config.poolConnection}${Config.poolServerConfigRoute}").asBytes
@@ -95,7 +96,7 @@ object Pool {
       } catch {
         case error: Throwable =>
           Logger.error(error.getMessage)
-          ProxyStatus.setStatus(StatusType.red, s"Error getting config from the pool: ${error.getMessage}")
+          ProxyStatus.setStatus(StatusType.red, "Config", s"Error getting config from the pool: ${error.getMessage}")
           Thread.sleep(5000)
       }
     }

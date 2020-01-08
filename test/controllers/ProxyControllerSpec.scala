@@ -12,6 +12,7 @@ import play.api.Configuration
 import play.api.libs.Files.SingletonTemporaryFileCreator
 import play.api.mvc.RawBuffer
 import proxy.PoolQueue
+import proxy.status.{ProxyStatus, StatusType}
 
 /**
  * Check if proxy server would pass any POST or GET requests with their header and body with any route to that route of the specified node
@@ -519,6 +520,26 @@ class ProxyControllerSpec extends PlaySpec with BeforeAndAfterAll {
         |  }
         |}
         |""".stripMargin.replaceAll("\\s", "")
+
+    val redInfo: String =
+      """
+        |{
+        |  "proxy" : {
+        |    "pool" : {
+        |      "connection" : "http://localhost:9001",
+        |      "config" : {
+        |        "wallet" : "3WvrVTCPJ1keSdtqNL5ayzQ62MmTNz4Rxq7vsjcXgLJBwZkvHrGa",
+        |        "difficulty_factor" : 10.0,
+        |        "transaction_request_value" : 67500000000
+        |      }
+        |    },
+        |    "status" : {
+        |      "health" : "RED",
+        |      "reason": "[Test] this is test"
+        |    }
+        |  }
+        |}
+        |""".stripMargin.replaceAll("\\s", "")
     /**
      * Purpose: Check the proxy info is in /info.
      * Prerequisites: Check test node and test pool server connections in test.conf.
@@ -537,6 +558,76 @@ class ProxyControllerSpec extends PlaySpec with BeforeAndAfterAll {
       contentAsString(response).replaceAll("\\s", "") mustBe greenInfo
     }
 
-    // TODO: check red status -> need status reset to be implemented
+    /**
+     * Purpose: Check the proxy info is in /info when status is red.
+     * Prerequisites: Check test node and test pool server connections in test.conf.
+     * Scenario: It sends a fake GET request to `/info` to the app.
+     * Test Conditions:
+     * * status is `200`
+     * * Content-Type is `application/json`
+     * * Content has the proxy info
+     */
+    "return info with red proxy" in {
+      ProxyStatus.setStatus(StatusType.red, "Test", "this is test")
+      val bytes: ByteString = ByteString("")
+      val response = controller.changeInfo.apply(FakeRequest(GET, "/info").withBody[RawBuffer](RawBuffer(bytes.size, SingletonTemporaryFileCreator, bytes)))
+
+      status(response) mustBe OK
+      contentType(response) mustBe Some("application/json")
+      contentAsString(response).replaceAll("\\s", "") mustBe redInfo
+    }
+  }
+
+  /** Check status */
+  "ProxyController resetStatus" should {
+    val success: String =
+      """
+        |{"success": true}
+        |""".stripMargin.replaceAll("\\s", "")
+
+    val failed: String =
+      """
+        |{
+        |   "success": false,
+        |   "message": "This is test"
+        |}
+        |""".stripMargin.replaceAll("\\s", "")
+    /**
+     * Purpose: Check the proxy status will change after
+     * Prerequisites: Check test node and test pool server connections in test.conf.
+     * Scenario: It sends a fake POST request to `/status/reset` to the app.
+     * Test Conditions:
+     * * status is `200`
+     * * Content-Type is `application/json`
+     * * Content is {"success": true}
+     */
+    "check proxy status is reset" in {
+      ProxyStatus.setStatus(StatusType.red, "Something", "This is test")
+      val bytes: ByteString = ByteString("")
+      val response = controller.resetStatus.apply(FakeRequest(POST, "/status/reset").withBody[RawBuffer](RawBuffer(bytes.size, SingletonTemporaryFileCreator, bytes)))
+
+      status(response) mustBe OK
+      contentType(response) mustBe Some("application/json")
+      contentAsString(response).replaceAll("\\s", "") mustBe success
+    }
+
+    /**
+     * Purpose: Check the proxy status won't change if category is Config
+     * Prerequisites: Check test node and test pool server connections in test.conf.
+     * Scenario: It sends a fake POST request to `/status/reset` to the app.
+     * Test Conditions:
+     * * status is `500`
+     * * Content-Type is `application/json`
+     * * Content is {"success": false,"message": "This is test"}
+     */
+    "check proxy status is not reset if status category is Config" in {
+      ProxyStatus.setStatus(StatusType.red, "Config", "This is test")
+      val bytes: ByteString = ByteString("")
+      val response = controller.resetStatus.apply(FakeRequest(POST, "/status/reset").withBody[RawBuffer](RawBuffer(bytes.size, SingletonTemporaryFileCreator, bytes)))
+
+      status(response) mustBe INTERNAL_SERVER_ERROR
+      contentType(response) mustBe Some("application/json")
+      contentAsString(response).replaceAll("\\s", "") mustBe failed
+    }
   }
 }

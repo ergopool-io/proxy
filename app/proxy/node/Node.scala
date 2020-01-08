@@ -47,11 +47,17 @@ object Node {
     val reqHeaders: Seq[(String, String)] = request.headers.headers
 
     val response: HttpResponse[Array[Byte]] = {
-      if (request.method == "GET") {
-        Http(s"${Config.nodeConnection}$uri").headers(reqHeaders).asBytes
+      try {
+        if (request.method == "GET") {
+          Http(s"${Config.nodeConnection}$uri").headers(reqHeaders).asBytes
+        }
+        else {
+          Http(s"${Config.nodeConnection}$uri").headers(reqHeaders).postData(Helper.ConvertRaw(request.body).toString).asBytes
+        }
       }
-      else {
-        Http(s"${Config.nodeConnection}$uri").headers(reqHeaders).postData(Helper.ConvertRaw(request.body).toString).asBytes
+      catch {
+        case error: Throwable =>
+          throw new Throwable(s"Node - $uri: ${error.getMessage}", error)
       }
     }
 
@@ -142,5 +148,19 @@ object Node {
     this.pk = Helper.convertBodyToJson(response.body).hcursor.downField("pk").as[String].getOrElse("")
 
     response
+  }
+
+  def parseErrorResponse(response: HttpResponse[Array[Byte]]): String = {
+    val body = Helper.convertBodyToJson(response.body)
+    val detail = body.hcursor.downField("detail").as[String].getOrElse("")
+
+    val pattern = "\\([^()]*\\)".r
+    var message = detail
+    var newMessage = message
+    while (message != newMessage) {
+      newMessage = message
+      message = pattern.replaceAllIn(newMessage, "")
+    }
+    message
   }
 }

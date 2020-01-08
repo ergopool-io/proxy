@@ -6,16 +6,29 @@ package proxy.status
 object ProxyStatus {
   private val health = new Health
   private var _reason: String = "Starting Proxy"
+  private var _category: String = "Proxy"
 
   /**
    * Set status of proxy
    *
    * @param health [[Short]] status of proxy
+   * @param category [[String]] category of reason
    * @param reason [[String]] reason for this status if not green
    */
-  def setStatus(health: Short, reason: String = ""): Unit = {
+  def setStatus(health: Short, category: String = "", reason: String = ""): Unit = {
     this.health.set(health)
+    this._category = category
     this._reason = reason
+  }
+
+  def reset(): Boolean = {
+    if (category != "Config") {
+      this.setStatus(StatusType.green)
+      true
+    }
+    else {
+      false
+    }
   }
 
   /**
@@ -38,11 +51,17 @@ object ProxyStatus {
    */
   def reason: String = this._reason
 
+  /**
+   * Getter for category
+   * @return
+   */
+  def category: String = this._category
+
   override def toString: String = {
     s"""
        |{
        |   "health": "${this.health}"
-       |   ${if (!this.isHealthy) ",\"reason\": \"" + this._reason + "\"" else ""}
+       |   ${if (!this.isHealthy) ",\"reason\": \"[" + this._category + "] " + this._reason + "\"" else ""}
        |}
        |""".stripMargin
   }
@@ -53,7 +72,7 @@ object ProxyStatus {
    * @param message [[String]] reason of being disabled
    */
   final class MiningDisabledException(message: String) extends Throwable("Mining has been disabled") {
-    ProxyStatus.setStatus(StatusType.red, message)
+    ProxyStatus.setStatus(StatusType.red, "Mining", message)
   }
 
   /**
@@ -62,6 +81,6 @@ object ProxyStatus {
    * @param message [[String]] reason of being not healthy
    */
   final class PoolRequestException(message: String) extends Throwable {
-    ProxyStatus.setStatus(StatusType.yellow, message)
+    ProxyStatus.setStatus(StatusType.yellow, "Pool", message)
   }
 }

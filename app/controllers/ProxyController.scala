@@ -7,11 +7,14 @@ import play.api.mvc._
 import play.api.http.HttpEntity
 import akka.util.ByteString
 import io.circe.Json
+import io.circe.syntax._
 import io.swagger.v3.oas.models.responses.{ApiResponse, ApiResponses}
 import io.swagger.v3.parser.OpenAPIV3Parser
 import io.swagger.v3.oas.models.OpenAPI
 import io.swagger.v3.core.util.Yaml
+import proxy.loggers.Logger
 import proxy.node.{MiningCandidate, Node}
+import proxy.status.ProxyStatus
 import proxy.{Config, Pool, PoolQueue, ProxyService, ProxySwagger, Response}
 
 /**
@@ -44,6 +47,37 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
   }
 
   /**
+   * Action handler for reloading config
+   *
+   * @return
+   */
+  def reloadConfig: Action[RawBuffer] = Action(parse.raw) { implicit request: Request[RawBuffer] =>
+    Config.loadPoolConfig()
+
+    Ok("""{"success": true}""").as("application/json")
+  }
+
+  /**
+   * Action handler for resetting status
+   *
+   * @return
+   */
+  def resetStatus: Action[RawBuffer] = Action(parse.raw) { implicit request: Request[RawBuffer] =>
+    val success: Boolean = ProxyStatus.reset()
+
+    if (success)
+      Ok("""{"success": true}""").as("application/json")
+    else
+      InternalServerError(
+        s"""
+          |{
+          |   "success": false,
+          |   "message": "${ProxyStatus.reason}"
+          |}
+          |""".stripMargin).as("application/json")
+  }
+
+  /**
    * Action handler to send solution to node and resend it to the pool server if it's a correct solution
    *
    * @return [[Result]] Response from the node
@@ -73,7 +107,7 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
   def getMiningCandidate: MiningAction[RawBuffer] = MiningAction[RawBuffer] { Action(parse.raw) { implicit request: Request[RawBuffer] =>
     if (!Config.genTransactionInProcess) {
       // Send the request to the node
-      val nodeResponse: Response = Node.sendRequest(request.uri, request)
+      val nodeResponse: Response = Node.sendRequest("/mining/candidate", request)
 
       if (nodeResponse.statusCode == 200) {
         nodeResponse.body = new MiningCandidate(nodeResponse).getResponse.map(_.toByte).toArray
@@ -149,5 +183,39 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
       header = ResponseHeader(200),
       body = HttpEntity.Strict(ByteString(newResponseBody.toString()), Some("application/json"))
     )
+  }
+
+  /**
+   * Check proxy is working correctly
+   *
+   * @return
+   */
+  def test: Action[RawBuffer] = Action(parse.raw) { implicit request: Request[RawBuffer] =>
+    Logger.messagingEnabled = true
+    Logger.messages.clear()
+    try {
+      this.getMiningCandidate.action.apply(request)
+    }
+    catch {
+      case error: Throwable =>
+        Logger.error(s"Error in mining candidate - ${error.getMessage}", error)
+    }
+    Logger.messagingEnabled = false
+    if (Logger.messages.isEmpty)
+      Ok(
+        """
+          |{
+          |   "success": true
+          |}
+          |""".stripMargin).as("application/json")
+    else {
+      InternalServerError(
+        s"""
+          |{
+          |   "success": false,
+          |   "messages": ${Logger.messages.getMessages.asJson}
+          |}
+          |""".stripMargin).as("application/json")
+    }
   }
 }
