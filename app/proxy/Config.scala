@@ -56,7 +56,7 @@ object Config {
       val cursor = poolConfig.hcursor
 
       this.walletAddress = cursor.downField("wallet_address").as[String].getOrElse("")
-      this.poolDifficultyFactor = BigDecimal(cursor.downField("pool_difficulty_factor").as[Double].getOrElse(0.0))
+      this.poolDifficultyFactor = BigDecimal(cursor.downField("pool_base_factor").as[Double].getOrElse(0.0))
       this.transactionRequestsValue = cursor.downField("reward").as[Long].getOrElse(0)
     }
   }
