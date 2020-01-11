@@ -2,7 +2,7 @@ maintainer in Linux := "AmirHossein Bahrami <a.bahrami9675@gmail.com>"
 name := """ergo-proxy"""
 organization := "ergo"
 
-version := "0.2"
+version := "0.3"
 
 lazy val root = (project in file(".")).enablePlugins(PlayScala)
 

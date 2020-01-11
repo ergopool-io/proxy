@@ -4,14 +4,14 @@ import helpers.Helper
 import io.circe.Json
 import proxy.loggers.Logger
 import proxy.status.ProxyStatus
-import proxy.{Config, Pool, PoolQueue, Response}
+import proxy.{Config, Pool, PoolShareQueue, Response}
 import scalaj.http.HttpResponse
 
 import scala.math.BigDecimal
 
 class MiningCandidate(response: Response) {
   private var resp: Response = response
-  private val responseBody: Json = Helper.convertBodyToJson(response.body)
+  private val responseBody: Json = Helper.ArrayByte(response.body).toJson
 
   /**
    * Get response for mining/candidate from the node response and handle proof
@@ -34,7 +34,7 @@ class MiningCandidate(response: Response) {
    * @return [[String]]
    */
   private def miningCandidateBody(): String = {
-    val cursor = Helper.convertBodyToJson(resp.body).hcursor
+    val cursor = Helper.ArrayByte(resp.body).toJson.hcursor
     val b: BigDecimal = cursor.downField("b").as[BigDecimal].getOrElse(BigDecimal("0"))
     s"""
        |{
@@ -126,7 +126,7 @@ class MiningCandidate(response: Response) {
         throw new ProxyStatus.MiningDisabledException(s"Route /wallet/transaction/generate failed with error code ${generatedTransaction.code}")
       }
 
-      val transaction = Helper.getHttpResponseBody(generatedTransaction)
+      val transaction = Helper.ArrayByte(generatedTransaction.body).toString
       val transactionValidation: HttpResponse[Array[Byte]] = Pool.sendTransaction(pk, transaction)
 
       if (transactionValidation.isSuccess) {
@@ -135,19 +135,19 @@ class MiningCandidate(response: Response) {
           resp = Response(candidateWithTxsResponse)
         else
           Logger.error(s"candidateWithTxs failed: ${Node.parseErrorResponse(candidateWithTxsResponse)}")
-        Helper.convertBodyToJson(candidateWithTxsResponse.body).hcursor.downField("proof").as[Json].getOrElse(Json.Null)
+        Helper.ArrayByte(candidateWithTxsResponse.body).toJson.hcursor.downField("proof").as[Json].getOrElse(Json.Null)
       }
       else {
-        Logger.error(s"Transaction validation failed: ${Helper.getHttpResponseBody(transactionValidation)}")
+        Logger.error(s"Transaction validation failed: ${Helper.ArrayByte(transactionValidation.body).toString}")
         Json.Null
       }
     }
     catch {
       case error: ProxyStatus.MiningDisabledException =>
-        PoolQueue.unlock()
+        PoolShareQueue.unlock()
         throw new Throwable(s"Creating proof failed (${error.getMessage})", error)
       case error: Throwable =>
-        PoolQueue.unlock()
+        PoolShareQueue.unlock()
         Logger.error(s"Creating proof failed: ${error.getMessage}")
         throw new ProxyStatus.MiningDisabledException(s"Creating proof failed: ${error.getMessage}")
     }

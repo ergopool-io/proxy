@@ -93,7 +93,8 @@ object PoolServerServlets {
            |{
            |    "reward": 67500000000,
            |    "wallet_address": "3WvrVTCPJ1keSdtqNL5ayzQ62MmTNz4Rxq7vsjcXgLJBwZkvHrGa",
-           |    "pool_base_factor": 10
+           |    "pool_base_factor": 10,
+           |    "max_chunk_size": 10
            |}
            |""".stripMargin)
     }

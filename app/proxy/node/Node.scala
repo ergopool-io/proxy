@@ -19,7 +19,7 @@ object Node {
    */
   def proof_=(value: String): Unit = {
     if (value != "") {
-      val proofValue = Helper.parseStringToJson(value)
+      val proofValue = Helper.convertToJson(value)
       val cursor: ACursor = proofValue.hcursor
       val txProof: ACursor = cursor.downField("txProofs").downArray
 
@@ -52,7 +52,7 @@ object Node {
           Http(s"${Config.nodeConnection}$uri").headers(reqHeaders).asBytes
         }
         else {
-          Http(s"${Config.nodeConnection}$uri").headers(reqHeaders).postData(Helper.ConvertRaw(request.body).toString).asBytes
+          Http(s"${Config.nodeConnection}$uri").headers(reqHeaders).postData(Helper.RawBufferValue(request.body).toString).asBytes
         }
       }
       catch {
@@ -89,7 +89,7 @@ object Node {
   def sendSolution(request: Request[RawBuffer]): Response = {
     // Prepare the request headers
     val reqHeaders: Seq[(String, String)] = request.headers.headers
-    val reqBody: HCursor = Helper.ConvertRaw(request.body).toJson.hcursor
+    val reqBody: HCursor = Helper.RawBufferValue(request.body).toJson.hcursor
     val body: String =
       s"""
          |{
@@ -145,13 +145,13 @@ object Node {
          |]
          |""".stripMargin
     val response = Http(s"${Config.nodeConnection}/mining/candidateWithTxs").headers(reqHeaders).postData(candidateWithTxsBody).asBytes
-    this.pk = Helper.convertBodyToJson(response.body).hcursor.downField("pk").as[String].getOrElse("")
+    this.pk = Helper.ArrayByte(response.body).toJson.hcursor.downField("pk").as[String].getOrElse("")
 
     response
   }
 
   def parseErrorResponse(response: HttpResponse[Array[Byte]]): String = {
-    val body = Helper.convertBodyToJson(response.body)
+    val body = Helper.ArrayByte(response.body).toJson
     val detail = body.hcursor.downField("detail").as[String].getOrElse("")
 
     val pattern = "\\([^()]*\\)".r

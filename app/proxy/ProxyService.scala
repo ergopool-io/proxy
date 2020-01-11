@@ -9,21 +9,37 @@ import proxy.status.ProxyStatus
 
 object ProxyService {
   /**
+   * create share body from cursor
+   * @param cursor cursor to json body
+   * @return
+   */
+  private def shareBody(cursor: HCursor): String = {
+    s"""
+       |{
+       |  "pk": "${cursor.downField("pk").as[String].getOrElse("")}",
+       |  "w": "${cursor.downField("w").as[String].getOrElse("")}",
+       |  "nonce": "${cursor.downField("n").as[String].getOrElse("")}",
+       |  "d": "${cursor.downField("d").as[BigInt].getOrElse("")}"
+       |}
+       |""".stripMargin
+  }
+
+  /**
    * Create share request body from miner request
    *
    * @param request [[Request]] The request to get body info
-   * @return [[String]]
+   * @return [[Iterable]]
    */
-  def getShareRequestBody(request: Request[RawBuffer]): String = {
-    val reqBody: HCursor = Helper.ConvertRaw(request.body).toJson.hcursor
-    s"""
-       |{
-       |  "pk": "${reqBody.downField("pk").as[String].getOrElse("")}",
-       |  "w": "${reqBody.downField("w").as[String].getOrElse("")}",
-       |  "nonce": "${reqBody.downField("n").as[String].getOrElse("")}",
-       |  "d": "${reqBody.downField("d").as[BigInt].getOrElse("")}"
-       |}
-       |""".stripMargin
+  def getShareRequestBody(request: Request[RawBuffer]): Iterable[String] = {
+    val reqBody: HCursor = Helper.RawBufferValue(request.body).toJson.hcursor
+    val shares = reqBody.values
+
+    if (shares.isEmpty) {
+      Iterable[String](shareBody(reqBody))
+    }
+    else {
+      shares.get.map(item => shareBody(item.hcursor))
+    }
   }
 
   /**

@@ -1,27 +1,21 @@
 package proxy
 
+import helpers.{Helper, List}
+import io.circe.Json
 import proxy.loggers.Logger
 import scalaj.http.{Http, HttpResponse}
+import io.circe.syntax._
 
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 
 /**
- * Request class
- * @param url [[String]] route to send the request to
- * @param headers [[Seq[(String, String)]]] body of request
- * @param body [[String]] body of request
- */
-private case class Request(url: String, headers: Seq[(String, String)], body: String)
-
-/**
  * Queue for sending pool request asynchronously
  * It tries to send each request in the queue until it's empty
  */
-class PoolQueue {
-
-  private val queue: mutable.Queue[Request] = mutable.Queue.empty
+class PoolShareQueue {
+  private val queue: mutable.Queue[Json] = mutable.Queue.empty
   private var _lock: Boolean = false
   private var isRunning: Boolean = false
 
@@ -48,16 +42,22 @@ class PoolQueue {
       queue.dequeue()
     } catch {
       case _: java.util.NoSuchElementException => // In case of queue cleared before popping
+      case _: java.lang.IndexOutOfBoundsException => // In case of queue cleared before popping
     }
+  }
+
+  private def popNItem(n: Int): Unit = {
+    (1 to n).foreach(_ => this.pop())
   }
 
   /**
    * Sends requests to the pool server
-   * @param request [[Request]] request to send
+   *
+   * @param onGoingQueue [[mutable.Queue]] request to send
    * @return response from the pool
    */
-  private def send(request: Request): HttpResponse[Array[Byte]] = {
-    Http(s"${request.url}").headers(request.headers).postData(request.body).asBytes
+  private def send(onGoingQueue: mutable.Queue[Json]): HttpResponse[Array[Byte]] = {
+    Http(s"${Config.poolConnection}${Config.poolServerSolutionRoute}").header("Content-Type", "application/json").postData(onGoingQueue.asJson.toString()).asBytes
   }
 
   /**
@@ -69,12 +69,15 @@ class PoolQueue {
       this.isRunning = true
       while (queue.nonEmpty) {
         try {
-          val request: Request = queue.head
+          val items = queue.take(Config.maxChunkSize)
 
-          val response: HttpResponse[Array[Byte]] = send(request)
+          if (items.nonEmpty) { // In case of queue was cleared between while condition and take action
+            val response: HttpResponse[Array[Byte]] = send(items)
 
-          // Pop request if it's accepted or rejected
-          if (response.isSuccess || response.isClientError) this.pop()
+            // Pop request if it's accepted or rejected
+            if (response.isSuccess || response.isClientError) this.popNItem(items.length)
+            else Thread.sleep(5000)
+          }
         }
         catch {
           case e: Throwable =>
@@ -86,17 +89,34 @@ class PoolQueue {
   }
 }
 
-object PoolQueue {
-  var cls = new PoolQueue
+object PoolShareQueue {
+  var cls = new PoolShareQueue
+
+  /**
+   * Run queue if it's not already running
+   */
+  private def runQueue(): Unit = {
+    if (!this.cls.isRunning) this.cls.run()
+  }
 
   /**
    * Add request to the queue
-   * @param url [[String]] route to send the request to
-   * @param body [[String]] body of request
+   *
+   * @param share [[String]] body of request
    */
-  def push(url: String, headers: Seq[(String, String)], body: String): Unit = {
-    this.cls.queue.enqueue(Request(url, headers, body))
-    if (!this.cls.isRunning) this.cls.run()
+  def push(share: String): Unit = {
+    this.cls.queue.enqueue(Helper.convertToJson(share))
+    runQueue()
+  }
+
+  /**
+   * Add shares to the queue
+   *
+   * @param shares [[Iterable]] iterable of shares
+   */
+  def push(shares: Iterable[String]): Unit = {
+    this.cls.queue.enqueueAll(shares.map(s => Helper.convertToJson(s)))
+    runQueue()
   }
 
   /**
@@ -120,12 +140,11 @@ object PoolQueue {
   }
 
   /**
-   * Check if the route parameter request is in the queue
-   * @param route [[String]] The route to check
-   * @return [[Boolean]]
+   * Return size of queue
+   * @return [[Int]]
    */
-  def isInQueue(route: String): Boolean = {
-    this.cls.queue.exists(p => p.url.endsWith(route))
+  def length: Int = {
+    this.cls.queue.length
   }
 
   /**
