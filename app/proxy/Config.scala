@@ -49,11 +49,12 @@ object Config {
   val poolServerProofRoute: String = Helper.readConfig(config,"pool.route.proof")
   val poolServerConfigRoute: String = Helper.readConfig(config,"pool.route.config")
   val poolServerTransactionRoute: String = Helper.readConfig(config,"pool.route.new_transaction")
+  var poolServerSpecificConfigRoute: String = Helper.readConfig(config,"pool.route.specific_config")
 
   def loadPoolConfig(): Unit = {
     // Get pool configs
     Future[Unit] {
-      val poolConfig: Json = Pool.config()
+      val poolConfig: Json = Pool.specificConfig()
       val cursor = poolConfig.hcursor
 
       this.walletAddress = cursor.downField("wallet_address").as[String].getOrElse("")

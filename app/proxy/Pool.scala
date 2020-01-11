@@ -1,6 +1,7 @@
 package proxy
 
 import helpers.Helper
+import helpers.Helper.ArrayByte
 import io.circe.Json
 import play.api.mvc.{RawBuffer, Request}
 import proxy.loggers.Logger
@@ -85,20 +86,44 @@ object Pool {
    *
    * @return [[Json]] the config from the pool server
    */
-  def config(): Json = {
+  def config(route: String = Config.poolServerConfigRoute): Json = {
     ProxyStatus.setStatus(StatusType.red, "Config", "Loading Pool Server Config")
     while (true) {
       try {
-        val response = Http(s"${Config.poolConnection}${Config.poolServerConfigRoute}").asBytes
+        val response = Http(s"${Config.poolConnection}$route").asBytes
         ProxyStatus.setStatus(StatusType.green)
         return Helper.ArrayByte(response.body).toJson
       } catch {
         case error: Throwable =>
-          Logger.error(error.getMessage)
+          Logger.error(s"Pool: ${error.getMessage}")
           ProxyStatus.setStatus(StatusType.red, "Config", s"Error getting config from the pool: ${error.getMessage}")
           Thread.sleep(5000)
       }
     }
     Json.Null //dummy return for compilation
+  }
+
+  /**
+   * Get config from the pool server
+   *
+   * @return [[Json]] the config from the pool server
+   */
+  def specificConfig(): Json = {
+    ProxyStatus.setStatus(StatusType.red, "Config", "Getting pk from the node")
+    while (true) {
+      try {
+        val miningCandidate = Http(s"${Config.nodeConnection}/mining/candidate").asBytes
+        val body = ArrayByte(miningCandidate.body).toJson.hcursor
+        Config.poolServerSpecificConfigRoute = Config.poolServerSpecificConfigRoute.replaceFirst("<pk>", s"${body.downField("pk").as[String].getOrElse("")}")
+
+        return config(Config.poolServerSpecificConfigRoute)
+      } catch {
+        case error: Throwable =>
+          Logger.error(s"Node: ${error.getMessage}")
+          ProxyStatus.setStatus(StatusType.red, "Config", s"Error getting pk from the node: ${error.getMessage}")
+          Thread.sleep(5000)
+      }
+    }
+    Json.Null // dummy return for compilation
   }
 }
