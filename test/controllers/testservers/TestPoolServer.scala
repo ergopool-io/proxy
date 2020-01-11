@@ -5,6 +5,7 @@ import org.eclipse.jetty.server.Server
 import org.eclipse.jetty.servlet.ServletHandler
 
 import helpers.Helper
+import proxy.Config
 
 class TestPoolServer(port: Int) extends TestJettyServer {
   override val serverPort: Int = port
@@ -16,10 +17,13 @@ class TestPoolServer(port: Int) extends TestJettyServer {
 
   server.setHandler(handler)
 
-  handler.addServletWithMapping(classOf[PoolServerServlets.ConfigServlet], "/api/config/value.json/")
-  handler.addServletWithMapping(classOf[PoolServerServlets.TransactionServlet], "/api/transaction.json/")
-  handler.addServletWithMapping(classOf[PoolServerServlets.InternalServerErrorServlet], "/api/share.json/")
-  handler.addServletWithMapping(classOf[PoolServerServlets.HeaderServlet], "/api/header.json/")
+  handler.addServletWithMapping(classOf[PoolServerServlets.ConfigServlet], Config.poolServerConfigRoute)
+  handler.addServletWithMapping(classOf[PoolServerServlets.ConfigServlet],
+    Config.poolServerSpecificConfigRoute.replaceFirst("<pk>",
+      "0278011ec0cf5feb92d61adb51dcb75876627ace6fd9446ab4cabc5313ab7b39a7"))
+  handler.addServletWithMapping(classOf[PoolServerServlets.TransactionServlet], Config.poolServerTransactionRoute)
+  handler.addServletWithMapping(classOf[PoolServerServlets.InternalServerErrorServlet], Config.poolServerSolutionRoute)
+  handler.addServletWithMapping(classOf[PoolServerServlets.HeaderServlet], Config.poolServerProofRoute)
 }
 
 object PoolServerServlets {

@@ -31,6 +31,11 @@ class ProxyControllerSpec extends PlaySpec with BeforeAndAfterAll {
 
   val controller: ProxyController = new ProxyController(stubControllerComponents())
 
+  override def beforeAll(): Unit = {
+    while (!ProxyStatus.isHealthy) Thread.sleep(1000)
+  }
+
+
   override def afterAll(): Unit = {
     node.stopServer()
 
