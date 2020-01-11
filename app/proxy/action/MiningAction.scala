@@ -3,7 +3,7 @@ package proxy.action
 import akka.util.ByteString
 import play.api.http.HttpEntity
 import play.api.mvc._
-import proxy.PoolQueue
+import proxy.PoolShareQueue
 import proxy.status.ProxyStatus
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -34,7 +34,7 @@ case class MiningAction[A](action: Action[A]) extends Action[A] with play.api.Lo
         )
       )
     }
-    else if (PoolQueue.isLock) {
+    else if (PoolShareQueue.isLock) {
       Future.successful(
         Result(
           header = ResponseHeader(500),

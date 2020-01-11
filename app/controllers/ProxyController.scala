@@ -15,7 +15,7 @@ import io.swagger.v3.core.util.Yaml
 import proxy.loggers.Logger
 import proxy.node.{MiningCandidate, Node}
 import proxy.status.ProxyStatus
-import proxy.{Config, Pool, PoolQueue, ProxyService, ProxySwagger, Response}
+import proxy.{Config, Pool, PoolShareQueue, ProxyService, ProxySwagger, Response}
 
 /**
  * Proxy pass controller
@@ -132,11 +132,9 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
     if (!Config.lastPoolProofWasSuccess) ProxyService.sendProofToPool()
 
     try {
-      // Prepare the request headers
-      val reqHeaders: Seq[(String, String)] = request.headers.headers
-      val body: String = ProxyService.getShareRequestBody(request)
+      val shares: Iterable[String] = ProxyService.getShareRequestBody(request)
 
-      PoolQueue.push(s"${Config.poolConnection}${Config.poolServerSolutionRoute}", reqHeaders, body)
+      PoolShareQueue.push(shares)
 
       // Send the request to pool server and get its response
       Ok(Json.obj().toString()).as("application/json")
@@ -173,9 +171,9 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
     // Send the request to the node
     val response: Response = Node.sendRequest(request.uri, request)
 
-    val respBody: Json = Helper.convertBodyToJson(response.body)
+    val respBody: Json = Helper.ArrayByte(response.body).toJson
 
-    val info: Json = Helper.parseStringToJson(ProxyService.proxyInfo)
+    val info: Json = Helper.convertToJson(ProxyService.proxyInfo)
 
     val newResponseBody: Json = respBody.deepMerge(info)
 
@@ -213,7 +211,7 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
         s"""
           |{
           |   "success": false,
-          |   "messages": ${Logger.messages.getMessages.asJson}
+          |   "messages": ${Logger.messages.getAll.asJson}
           |}
           |""".stripMargin).as("application/json")
     }

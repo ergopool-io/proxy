@@ -23,12 +23,25 @@ object Helper {
 
 
   /**
-   * Convert response body to [[Json]]
-   * @param body response body
-   * @return [[Json]]
+   * Convert ArrayByte body
+   * @param value [[Array]] The body to convert
    */
-  def convertBodyToJson(body: Array[Byte]): Json = {
-    io.circe.parser.parse(body.map(_.toChar).mkString).getOrElse(Json.Null)
+  final case class ArrayByte(value: Array[Byte]) {
+    /**
+     * Convert body to Json
+     * @return [[Json]]
+     */
+    def toJson: Json = {
+      convertToJson(this.toString)
+    }
+
+    /**
+     * Convert body to string
+     * @return [[String]]
+     */
+    override def toString: String = {
+      value.map(_.toChar).mkString
+    }
   }
 
   /**
@@ -36,7 +49,7 @@ object Helper {
    * @param string [[String]] The string to convert
    * @return [[Json]]
    */
-  def parseStringToJson(string: String): Json = {
+  def convertToJson(string: String): Json = {
     io.circe.parser.parse(string).getOrElse(Json.Null)
   }
 
@@ -55,15 +68,15 @@ object Helper {
 
   /**
    * Convert RawBuffer body
-   * @param body [[RawBuffer]] The body to convert
+   * @param value [[RawBuffer]] The body to convert
    */
-  final case class ConvertRaw(body: RawBuffer) {
+  final case class RawBufferValue(value: RawBuffer) {
     /**
      * Convert body to Json
      * @return [[Json]]
      */
     def toJson: Json = {
-      io.circe.parser.parse(body.asBytes().getOrElse(ByteString("")).map(_.toChar).mkString).getOrElse(Json.Null)
+      io.circe.parser.parse(value.asBytes().getOrElse(ByteString("")).map(_.toChar).mkString).getOrElse(Json.Null)
     }
 
     /**
@@ -71,16 +84,7 @@ object Helper {
      * @return [[String]]
      */
     override def toString: String = {
-      body.asBytes().getOrElse(ByteString("")).map(_.toChar).mkString
+      value.asBytes().getOrElse(ByteString("")).map(_.toChar).mkString
     }
-  }
-
-  /**
-   * Get string form of HttpResponse body
-   * @param response [[HttpResponse]] the response to read body
-   * @return [[String]]
-   */
-  def getHttpResponseBody(response: HttpResponse[Array[Byte]]): String = {
-    response.body.map(_.toChar).mkString
   }
 }

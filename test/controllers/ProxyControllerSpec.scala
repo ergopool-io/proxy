@@ -11,7 +11,7 @@ import org.scalatest.BeforeAndAfterAll
 import play.api.Configuration
 import play.api.libs.Files.SingletonTemporaryFileCreator
 import play.api.mvc.RawBuffer
-import proxy.PoolQueue
+import proxy.PoolShareQueue
 import proxy.status.{ProxyStatus, StatusType}
 
 /**
@@ -34,7 +34,7 @@ class ProxyControllerSpec extends PlaySpec with BeforeAndAfterAll {
   override def afterAll(): Unit = {
     node.stopServer()
 
-    PoolQueue.resetQueue()
+    PoolShareQueue.resetQueue()
     Thread.sleep(2000) // To get rid of request in the queues thread
 
     pool.stopServer()
@@ -110,7 +110,7 @@ class ProxyControllerSpec extends PlaySpec with BeforeAndAfterAll {
 
       status(response) mustBe BAD_REQUEST
       contentType(response) mustBe Some("application/json")
-      PoolQueue.isInQueue("/api/share.json/") mustBe false
+      PoolShareQueue.length mustBe 0
     }
 
 
@@ -126,7 +126,7 @@ class ProxyControllerSpec extends PlaySpec with BeforeAndAfterAll {
      * * Content is `{"success": true}`
      */
     "return 200 status code on correct solution" in {
-      PoolQueue.resetQueue()
+      PoolShareQueue.resetQueue()
 
       val body: String =
         """
@@ -144,7 +144,7 @@ class ProxyControllerSpec extends PlaySpec with BeforeAndAfterAll {
       status(response) mustBe OK
       contentType(response) mustBe Some("application/json")
       contentAsString(response) must include ("{\"success\": true}")
-      PoolQueue.isInQueue("/api/share.json/") mustBe true
+      PoolShareQueue.length mustBe 1
     }
   }
 
@@ -163,7 +163,7 @@ class ProxyControllerSpec extends PlaySpec with BeforeAndAfterAll {
      * * proof of TestNode must not be equal to "null" string
      */
     "return 200 status code with new header and generate proof" in {
-      PoolQueue.resetQueue()
+      PoolShareQueue.resetQueue()
 
       val msg: String = "First_msg"
       NodeServlets.msg = msg
@@ -203,7 +203,7 @@ class ProxyControllerSpec extends PlaySpec with BeforeAndAfterAll {
      * * proofCreated of the node must be false
      */
     "return 200 status code with same header" in {
-      PoolQueue.resetQueue()
+      PoolShareQueue.resetQueue()
 
       val msg: String = "First_msg"
       NodeServlets.msg = msg
@@ -244,7 +244,7 @@ class ProxyControllerSpec extends PlaySpec with BeforeAndAfterAll {
      * * proofCreated of the node must be false
      */
     "return 200 status code with new header but existing proof" in {
-      PoolQueue.resetQueue()
+      PoolShareQueue.resetQueue()
 
       val msg: String = "Second_msg"
       NodeServlets.msg = msg
@@ -285,7 +285,7 @@ class ProxyControllerSpec extends PlaySpec with BeforeAndAfterAll {
      * * Content is `{"success":true}`
      */
     "return 200 status code from pool server on new share" in {
-      PoolQueue.resetQueue()
+      PoolShareQueue.resetQueue()
 
       val body: String =
         """
@@ -303,7 +303,7 @@ class ProxyControllerSpec extends PlaySpec with BeforeAndAfterAll {
       status(response) mustBe OK
       contentType(response) mustBe Some("application/json")
       contentAsString(response).replaceAll("\\s", "") must include ("{}")
-      PoolQueue.isInQueue("/api/share.json/") mustBe true
+      PoolShareQueue.length mustBe 1
     }
   }
 

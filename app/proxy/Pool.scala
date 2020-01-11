@@ -25,8 +25,8 @@ object Pool {
          |""".stripMargin
 
     // Send generated transaction to the pool server
-    PoolQueue.lock()
-    PoolQueue.waitUntilEmptied()
+    PoolShareQueue.lock()
+    PoolShareQueue.waitUntilEmptied()
     Http(s"${Config.poolConnection}${Config.poolServerTransactionRoute}").headers(Seq(("Content-Type", "application/json"))).postData(generatedTransactionResponseBody).asBytes
   }
 
@@ -36,9 +36,9 @@ object Pool {
    * @return [[HttpResponse]]
    */
   def sendProof(): HttpResponse[Array[Byte]] = {
-    PoolQueue.lock()
+    PoolShareQueue.lock()
 
-    PoolQueue.waitUntilEmptied()
+    PoolShareQueue.waitUntilEmptied()
 
     try {
       Config.lastPoolProofWasSuccess = false
@@ -51,7 +51,7 @@ object Pool {
         throw new ProxyStatus.PoolRequestException(s"Exception happened when tried to send proof to pool: ${error.getMessage}")
     }
     finally {
-      PoolQueue.unlock()
+      PoolShareQueue.unlock()
     }
   }
 
@@ -61,7 +61,7 @@ object Pool {
    * @param request [[Request]] the request that contains solution
    */
   def sendSolution(request: Request[RawBuffer]): Unit = {
-    val requestBody: Json = Helper.ConvertRaw(request.body).toJson
+    val requestBody: Json = Helper.RawBufferValue(request.body).toJson
     val cursor = requestBody.hcursor
     try {
       val bodyForPool: String =
@@ -73,8 +73,7 @@ object Pool {
            |  "d": "${cursor.downField("d").as[BigInt].getOrElse("")}"
            |}
            |""".stripMargin
-      val reqHeaders: Seq[(String, String)] = request.headers.headers
-      PoolQueue.push(s"${Config.poolConnection}${Config.poolServerSolutionRoute}", reqHeaders, bodyForPool)
+      PoolShareQueue.push(bodyForPool)
     } catch {
       case error: Throwable =>
         Logger.error(error.getMessage)
@@ -92,7 +91,7 @@ object Pool {
       try {
         val response = Http(s"${Config.poolConnection}${Config.poolServerConfigRoute}").asBytes
         ProxyStatus.setStatus(StatusType.green)
-        return Helper.convertBodyToJson(response.body)
+        return Helper.ArrayByte(response.body).toJson
       } catch {
         case error: Throwable =>
           Logger.error(error.getMessage)
