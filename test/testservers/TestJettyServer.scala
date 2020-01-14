@@ -1,4 +1,4 @@
-package controllers.testservers
+package testservers
 
 import org.eclipse.jetty.server.{NetworkConnector, Server}
 import org.eclipse.jetty.servlet.ServletHandler

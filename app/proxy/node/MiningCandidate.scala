@@ -102,7 +102,7 @@ class MiningCandidate(response: Response) {
       }
       catch {
         case error: Throwable =>
-          throw new Throwable(s"Creating proof failed (${error.getMessage})", error)
+          throw error
       }
       finally {
         Config.genTransactionInProcess = false
@@ -144,12 +144,12 @@ class MiningCandidate(response: Response) {
     }
     catch {
       case error: ProxyStatus.MiningDisabledException =>
-        PoolShareQueue.unlock()
         throw new Throwable(s"Creating proof failed (${error.getMessage})", error)
       case error: Throwable =>
-        PoolShareQueue.unlock()
-        Logger.error(s"Creating proof failed: ${error.getMessage}")
         throw new ProxyStatus.MiningDisabledException(s"Creating proof failed: ${error.getMessage}")
+    }
+    finally {
+      PoolShareQueue.unlock()
     }
   }
 }

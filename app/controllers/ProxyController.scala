@@ -131,17 +131,11 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
   def sendShare: MiningAction[RawBuffer] = MiningAction[RawBuffer] { Action(parse.raw) { implicit request: Request[RawBuffer] =>
     if (!Config.lastPoolProofWasSuccess) ProxyService.sendProofToPool()
 
-    try {
-      val shares: Iterable[String] = ProxyService.getShareRequestBody(request)
+    val shares: Iterable[String] = ProxyService.getShareRequestBody(request)
 
-      PoolShareQueue.push(shares)
+    PoolShareQueue.push(shares)
 
-      // Send the request to pool server and get its response
-      Ok(Json.obj().toString()).as("application/json")
-    } catch {
-      case _: Throwable =>
-        Ok(Json.obj().toString()).as("application/json")
-    }
+    Ok(Json.obj().toString()).as("application/json")
   }}
 
   /**
