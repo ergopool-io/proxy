@@ -2,7 +2,6 @@ package controllers
 
 import akka.util.ByteString
 import com.typesafe.config.ConfigFactory
-import controllers.testservers.{NodeServlets, PoolServerServlets, TestNode, TestPoolServer}
 import helpers._
 import org.scalatestplus.play._
 import play.api.test._
@@ -13,6 +12,7 @@ import play.api.libs.Files.SingletonTemporaryFileCreator
 import play.api.mvc.RawBuffer
 import proxy.PoolShareQueue
 import proxy.status.{ProxyStatus, StatusType}
+import testservers.{NodeServlets, PoolServerServlets, TestNode, TestPoolServer}
 
 /**
  * Check if proxy server would pass any POST or GET requests with their header and body with any route to that route of the specified node
@@ -61,7 +61,7 @@ class ProxyControllerSpec extends PlaySpec with BeforeAndAfterAll {
      */
     "return success for a get request" in {
       val bytes: ByteString = ByteString("")
-      val response = controller.proxyPass.apply(FakeRequest(GET, "/test/proxy").withBody[RawBuffer](RawBuffer(bytes.size, SingletonTemporaryFileCreator, bytes)))
+      val response = controller.proxyPass.apply(FakeRequest(GET, "/test/proxy").withHeaders(("Content-Type", "")).withBody[RawBuffer](RawBuffer(bytes.size, SingletonTemporaryFileCreator, bytes)))
 
       status(response) mustBe OK
       contentType(response) mustBe Some("application/json")
@@ -84,6 +84,29 @@ class ProxyControllerSpec extends PlaySpec with BeforeAndAfterAll {
       status(response) mustBe OK
       contentType(response) mustBe Some("application/json")
       contentAsString(response) must include ("{\"success\": true}")
+    }
+  }
+
+  /** Check solution requests */
+  "ProxyController reloadConfig" should {
+    /**
+     * Purpose: Check that config will be reloaded.
+     * Prerequisites: Check test node and test pool server connections in test.conf.
+     * Scenario: Sends a reload request to controller
+     * Test Conditions:
+     * * status is OK
+     * * Content-Type is application/json
+     * * proxy status is healthy
+     */
+    "return 200 on reloading config" in {
+      val bytes: ByteString = ByteString("")
+      val fakeRequest = FakeRequest(POST, "/config/reload").withBody[RawBuffer](RawBuffer(bytes.size, SingletonTemporaryFileCreator, bytes))
+      val response = controller.reloadConfig.apply(fakeRequest)
+
+      status(response) mustBe OK
+      contentType(response) mustBe Some("application/json")
+      while (!ProxyStatus.isHealthy) Thread.sleep(1000)
+      ProxyStatus.isHealthy mustBe true
     }
   }
 

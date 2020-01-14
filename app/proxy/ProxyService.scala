@@ -65,6 +65,7 @@ object ProxyService {
        |""".stripMargin
   }
 
+  // $COVERAGE-OFF$
   /**
    * Send node proof to the pool server
    *
@@ -85,4 +86,5 @@ object ProxyService {
       }
     }
   }
+  // $COVERAGE-ON$
 }

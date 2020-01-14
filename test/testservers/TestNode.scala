@@ -1,9 +1,10 @@
-package controllers.testservers
+package testservers
 
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 import org.eclipse.jetty.server.Server
 import org.eclipse.jetty.servlet.ServletHandler
 import helpers.Helper
+import proxy.Config
 
 class TestNode(port: Int) extends TestJettyServer {
   override val serverPort: Int = port
@@ -28,6 +29,7 @@ object NodeServlets {
   var proof: String = "null"
   var proofCreated: Boolean = false
   var msg: String = ""
+  var failTransaction: Boolean = false
   val transactionResponse: String =
     """
       |{
@@ -182,8 +184,8 @@ object NodeServlets {
          |{
          |  "requests": [
          |    {
-         |      "address": "3WvrVTCPJ1keSdtqNL5ayzQ62MmTNz4Rxq7vsjcXgLJBwZkvHrGa",
-         |      "value": 67500000000
+         |      "address": "${Config.walletAddress}",
+         |      "value": ${Config.transactionRequestsValue}
          |    }
          |  ],
          |  "fee": 1000000,
@@ -194,7 +196,7 @@ object NodeServlets {
       val body: String = Helper.readHttpServletRequestBody(req).replaceAll("\\s", "")
       resp.setContentType("application/json")
 
-      if (body == reqBodyCheck) {
+      if (!failTransaction && body == reqBodyCheck) {
         resp.setStatus(HttpServletResponse.SC_OK)
         resp.getWriter.print(transactionResponse)
       }

@@ -1,4 +1,4 @@
-package controllers.testservers
+package testservers
 
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 import org.eclipse.jetty.server.Server
@@ -29,6 +29,7 @@ class TestPoolServer(port: Int) extends TestJettyServer {
 object PoolServerServlets {
   var gotSolution: Boolean = false
   var gotProof: Boolean = false
+  var failTransaction: Boolean = false
 
   class TransactionServlet extends HttpServlet {
     val reqBodyCheck: String =
@@ -77,7 +78,7 @@ object PoolServerServlets {
     override protected def doPost(request: HttpServletRequest, response: HttpServletResponse): Unit = {
       val body: String = Helper.readHttpServletRequestBody(request).replaceAll("\\s", "")
       response.setContentType("application/json")
-      if (body == reqBodyCheck) {
+      if (!failTransaction && body == reqBodyCheck) {
         response.setStatus(HttpServletResponse.SC_OK)
         response.getWriter.print("{\"success\": true}")
       }
