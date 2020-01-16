@@ -150,6 +150,7 @@ object Node {
     response
   }
 
+  // $COVERAGE-OFF$
   def parseErrorResponse(response: HttpResponse[Array[Byte]]): String = {
     val body = Helper.ArrayByte(response.body).toJson
     val detail = body.hcursor.downField("detail").as[String].getOrElse("")
@@ -163,4 +164,5 @@ object Node {
     }
     message
   }
+  // $COVERAGE-ON$
 }

@@ -1,11 +1,8 @@
 package proxy.node
 
 import akka.util.ByteString
-import com.typesafe.config.ConfigFactory
-import helpers.Helper
 import org.scalatest.BeforeAndAfterAll
 import org.scalatestplus.play.PlaySpec
-import play.api.Configuration
 import play.api.libs.Files.SingletonTemporaryFileCreator
 import play.api.mvc.RawBuffer
 import play.api.test.FakeRequest
@@ -16,10 +13,8 @@ import testservers.{NodeServlets, PoolServerServlets, TestNode, TestPoolServer}
 import scala.util.{Failure, Try}
 
 class MiningCandidateSpec extends PlaySpec with BeforeAndAfterAll {
-  val config: Configuration = Configuration(ConfigFactory.load("test.conf"))
-
-  val testNodeConnection: String = Helper.readConfig(config, "node.connection")
-  val testPoolServerConnection: String = Helper.readConfig(config, "pool.connection")
+  val testNodeConnection: String = Config.nodeConnection
+  val testPoolServerConnection: String = Config.poolConnection
 
   val node: TestNode = new TestNode(testNodeConnection.split(":").last.toInt)
   val pool: TestPoolServer = new TestPoolServer(testPoolServerConnection.split(":").last.toInt)
