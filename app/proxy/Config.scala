@@ -27,7 +27,6 @@ object Config {
   var poolDifficultyFactor: BigDecimal = BigDecimal(0.0)
   var transactionRequestsValue: Long = 0
   var maxChunkSize: Short = 0
-  loadPoolConfig()
 
   // The current block header
   var blockHeader: String = ""

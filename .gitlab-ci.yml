@@ -17,4 +17,4 @@ stages:
 test:
   stage: test
   script:
-  - sbt clean coverage test
+  - sbt clean coverage test coverageReport

@@ -177,6 +177,7 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
     )
   }
 
+  // $COVERAGE-OFF$
   /**
    * Check proxy is working correctly
    *
@@ -210,4 +211,5 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
           |""".stripMargin).as("application/json")
     }
   }
+  // $COVERAGE-ON$
 }

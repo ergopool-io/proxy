@@ -1,16 +1,13 @@
 package controllers
 
 import akka.util.ByteString
-import com.typesafe.config.ConfigFactory
-import helpers._
 import org.scalatestplus.play._
 import play.api.test._
 import play.api.test.Helpers._
 import org.scalatest.BeforeAndAfterAll
-import play.api.Configuration
 import play.api.libs.Files.SingletonTemporaryFileCreator
 import play.api.mvc.RawBuffer
-import proxy.PoolShareQueue
+import proxy.{Config, PoolShareQueue}
 import proxy.status.{ProxyStatus, StatusType}
 import testservers.{NodeServlets, PoolServerServlets, TestNode, TestPoolServer}
 
@@ -18,16 +15,16 @@ import testservers.{NodeServlets, PoolServerServlets, TestNode, TestPoolServer}
  * Check if proxy server would pass any POST or GET requests with their header and body with any route to that route of the specified node
  */
 class ProxyControllerSpec extends PlaySpec with BeforeAndAfterAll {
-  val config: Configuration = Configuration(ConfigFactory.load("test.conf"))
-
-  val testNodeConnection: String = Helper.readConfig(config, "node.connection")
-  val testPoolServerConnection: String = Helper.readConfig(config, "pool.connection")
+  val testNodeConnection: String = Config.nodeConnection
+  val testPoolServerConnection: String = Config.poolConnection
 
   val node: TestNode = new TestNode(testNodeConnection.split(":").last.toInt)
   val pool: TestPoolServer = new TestPoolServer(testPoolServerConnection.split(":").last.toInt)
 
   node.startServer()
   pool.startServer()
+
+  Config.loadPoolConfig()
 
   val controller: ProxyController = new ProxyController(stubControllerComponents())
 
