@@ -34,6 +34,9 @@ object Config {
   // Set the node params
   val nodeConnection: String = Helper.readConfig(config,"node.connection")
 
+  // Address to use in protection script
+  val withdrawAddress: String = Helper.readConfig(config, "node.withdraw.address")
+
   // The proof for the node
   var theProof: String = ""
 

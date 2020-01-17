@@ -7,9 +7,24 @@ import proxy.{Config, Response}
 import scalaj.http.{Http, HttpResponse}
 
 object Node {
-  private[this] var pk: String = ""
-  private[this] var _proof: String = ""
+  private var pk: String = ""
+  private var _lastProtectionAddress: String = _
 
+  def lastProtectionAddress: String = _lastProtectionAddress
+
+  private val _protectionScript: String =
+    """
+      |{"source": "(proveDlog(CONTEXT.preHeader.minerPk).propBytes == PK(\"<A>\").propBytes && PK(\"<A>\"))|| PK(\"<A2>\")"}
+      |""".stripMargin
+
+  private def protectionScript: String = {
+    if (pk != "")
+      this._protectionScript.replaceAll("<A>", this.pk).replaceAll("<A2>", Config.withdrawAddress)
+    else
+      ""
+  }
+
+  private[this] var _proof: String = ""
   def proof: String = _proof
 
   /**
@@ -165,4 +180,14 @@ object Node {
     message
   }
   // $COVERAGE-ON$
+
+  /**
+   * Create protection script
+   */
+  def createProtectionScript(): Unit = {
+    val response = Http(s"${Config.nodeConnection}/script/p2sAddress").header("api_key", Config.apiKey).postData(this.protectionScript).asBytes
+
+    if (response.isSuccess)
+      _lastProtectionAddress = Helper.ArrayByte(response.body).toJson.hcursor.downField("address").as[String].getOrElse("")
+  }
 }

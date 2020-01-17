@@ -23,6 +23,7 @@ class TestNode(port: Int) extends TestJettyServer {
   handler.addServletWithMapping(classOf[NodeServlets.WalletTransactionGenerateServlet], "/wallet/transaction/generate")
   handler.addServletWithMapping(classOf[NodeServlets.SwaggerConfigServlet], "/api-docs/swagger.conf")
   handler.addServletWithMapping(classOf[NodeServlets.InfoServlet], "/info")
+  handler.addServletWithMapping(classOf[NodeServlets.P2SAddress], "/script/p2sAddress")
 }
 
 object NodeServlets {
@@ -30,6 +31,7 @@ object NodeServlets {
   var proofCreated: Boolean = false
   var msg: String = ""
   var failTransaction: Boolean = false
+  val protectionAddress: String = "3WwbzW6u8hKWBcL1W7kNVMr25s2UHfSBnYtwSHvrRQt7DdPuoXrt"
   val transactionResponse: String =
     """
       |{
@@ -373,6 +375,19 @@ object NodeServlets {
       resp.setContentType("application/json")
       resp.setStatus(HttpServletResponse.SC_OK)
       resp.getWriter.print("{}")
+    }
+  }
+
+  class P2SAddress extends HttpServlet {
+    override protected def doPost(req: HttpServletRequest, resp: HttpServletResponse): Unit = {
+      resp.setContentType("application/json")
+      resp.setStatus(HttpServletResponse.SC_OK)
+      resp.getWriter.print(
+        s"""
+          |{
+          |  "address": "${protectionAddress}"
+          |}
+          |""".stripMargin)
     }
   }
 }
