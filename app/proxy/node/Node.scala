@@ -7,7 +7,8 @@ import proxy.{Config, Response}
 import scalaj.http.{Http, HttpResponse}
 
 object Node {
-  private var pk: String = ""
+  var pk: String = ""
+  var unspentBoxes: Vector[Box] = _
   private var _lastProtectionAddress: String = _
 
   def lastProtectionAddress: String = _lastProtectionAddress
@@ -189,5 +190,27 @@ object Node {
 
     if (response.isSuccess)
       _lastProtectionAddress = Helper.ArrayByte(response.body).toJson.hcursor.downField("address").as[String].getOrElse("")
+  }
+
+  /**
+   * Fetch unspent boxes that have the same address as protection address
+   */
+  def fetchUnspentBoxes(): Unit = {
+    val response = Http(s"${Config.nodeConnection}/wallet/boxes/unspent").header("api_key", Config.apiKey).asBytes
+
+    if (response.isSuccess) {
+      this.unspentBoxes = Helper.ArrayByte(response.body).toJson.asArray.getOrElse(Vector())
+        .filter(item => {
+          val boxAddress = item.hcursor.downField("address").as[String].getOrElse("")
+          boxAddress == this._lastProtectionAddress
+        })
+        .map(item => {
+          val cursor = item.hcursor
+          val boxInfo = cursor.downField("box").as[Json].getOrElse(Json.Null).hcursor
+          val boxId = boxInfo.downField("boxId").as[String].getOrElse("")
+          val amount = boxInfo.downField("value").as[Long].getOrElse(0L)
+          Box(boxId, amount)
+        })
+    }
   }
 }

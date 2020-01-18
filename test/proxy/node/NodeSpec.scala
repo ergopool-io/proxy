@@ -19,8 +19,7 @@ class NodeSpec extends PlaySpec with BeforeAndAfterAll {
     super.afterAll()
   }
 
-  /** Check MiningCandidate on fail scenarios */
-  "Node createProtectionScript creates protection and saves the address" should {
+  "Node createProtectionScript" should {
     /**
      * Purpose: Check creation of protection script scenario.
      * Prerequisites: Check test node connection in test.conf.
@@ -28,9 +27,23 @@ class NodeSpec extends PlaySpec with BeforeAndAfterAll {
      * Test Conditions:
      * * protection address is right
      */
-    "throw exception on failure in transaction generation" in {
+    "creates protection and saves the address" in {
       Node.createProtectionScript()
       Node.lastProtectionAddress mustBe NodeServlets.protectionAddress
+    }
+  }
+
+  "Node fetchUnspentBoxes" should {
+    /**
+     * Purpose: Check just boxes with protection address are fetched.
+     * Prerequisites: Check test node connection in test.conf.
+     * Scenario: Call method to fetch and save unspent boxes with the node protection address.
+     * Test Conditions:
+     * * there is one box in the vector
+     */
+    "fetch unspent boxes with protection address" in {
+      Node.fetchUnspentBoxes()
+      Node.unspentBoxes.size mustBe 1
     }
   }
 }
