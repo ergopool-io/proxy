@@ -24,6 +24,7 @@ class TestNode(port: Int) extends TestJettyServer {
   handler.addServletWithMapping(classOf[NodeServlets.SwaggerConfigServlet], "/api-docs/swagger.conf")
   handler.addServletWithMapping(classOf[NodeServlets.InfoServlet], "/info")
   handler.addServletWithMapping(classOf[NodeServlets.P2SAddress], "/script/p2sAddress")
+  handler.addServletWithMapping(classOf[NodeServlets.WalletUnspentBoxes], "/wallet/boxes/unspent")
 }
 
 object NodeServlets {
@@ -385,9 +386,35 @@ object NodeServlets {
       resp.getWriter.print(
         s"""
           |{
-          |  "address": "${protectionAddress}"
+          |  "address": "$protectionAddress"
           |}
           |""".stripMargin)
+    }
+  }
+
+  class WalletUnspentBoxes extends HttpServlet {
+    override protected def doGet(req: HttpServletRequest, resp: HttpServletResponse): Unit = {
+      resp.setContentType("application/json")
+      resp.setStatus(HttpServletResponse.SC_OK)
+      resp.getWriter.print(
+        s"""
+           |[
+           |  {
+           |    "box": {
+           |      "boxId": "1ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117",
+           |      "value": 147
+           |    },
+           |    "address": "$protectionAddress"
+           |  },
+           |  {
+           |    "box": {
+           |      "boxId": "1ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117",
+           |      "value": 147
+           |    },
+           |    "address": "another_address"
+           |  }
+           |]
+           |""".stripMargin)
     }
   }
 }

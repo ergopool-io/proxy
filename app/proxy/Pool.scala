@@ -114,7 +114,8 @@ object Pool {
       try {
         val miningCandidate = Http(s"${Config.nodeConnection}/mining/candidate").asBytes
         val body = ArrayByte(miningCandidate.body).toJson.hcursor
-        Config.poolServerSpecificConfigRoute = Config.poolServerSpecificConfigRoute.replaceFirst("<pk>", s"${body.downField("pk").as[String].getOrElse("")}")
+        Node.pk = body.downField("pk").as[String].getOrElse("")
+        Config.poolServerSpecificConfigRoute = Config.poolServerSpecificConfigRoute.replaceFirst("<pk>", s"${Node.pk}")
 
         return config(Config.poolServerSpecificConfigRoute)
       } catch {
