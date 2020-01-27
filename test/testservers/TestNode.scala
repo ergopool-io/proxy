@@ -26,6 +26,7 @@ class TestNode(port: Int) extends TestJettyServer {
   handler.addServletWithMapping(classOf[NodeServlets.UTXOByIdBinaryServlet], "/utxo/byIdBinary/*")
   handler.addServletWithMapping(classOf[NodeServlets.WalletTransactionByIdServlet], "/wallet/transactionById")
   handler.addServletWithMapping(classOf[NodeServlets.WalletBoxesUnspentServlet], "/wallet/boxes/unspent")
+  handler.addServletWithMapping(classOf[NodeServlets.WalletDeriveKeyServlet], "/wallet/deriveKey")
 }
 
 object NodeServlets {
@@ -463,6 +464,19 @@ object NodeServlets {
       resp.setContentType("application/json")
       resp.setStatus(HttpServletResponse.SC_OK)
       resp.getWriter.print(unspentBoxes)
+    }
+  }
+
+  class WalletDeriveKeyServlet extends HttpServlet {
+    override protected def doPost(req: HttpServletRequest, resp: HttpServletResponse): Unit = {
+      resp.setContentType("application/json")
+      resp.setStatus(HttpServletResponse.SC_OK)
+      resp.getWriter.print(
+        """
+          |{
+          |  "address": "3WwbzW6u8hKWBcL1W7kNVMr25s2UHfSBnYtwSHvrRQt7DdPuoXrt"
+          |}
+          |""".stripMargin)
     }
   }
 }

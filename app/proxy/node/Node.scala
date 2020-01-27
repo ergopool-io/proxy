@@ -14,9 +14,9 @@ object Node {
   private var remainBoxesTransaction: Transaction = _
   private var txsList: Vector[Transaction] = Vector[Transaction]()
   private var _gapTransaction: Transaction = _
-  private val _protectionScript: String =
+  private val _protectionScript: String = // TODO: add lock (removed part: " && PK(\"<lock>\")")
     """
-      |{"source": "(proveDlog(CONTEXT.preHeader.minerPk).propBytes == PK(\"<A>\").propBytes && PK(\"<A>\"))|| PK(\"<A2>\")"}
+      |{"source": "(proveDlog(CONTEXT.preHeader.minerPk).propBytes == PK(\"<miner>\").propBytes)|| PK(\"<withdraw>\")"}
       |""".stripMargin
 
   def gapTransaction: Transaction = _gapTransaction
@@ -29,9 +29,18 @@ object Node {
 
   private def protectionScript: String = {
     if (pk != "")
-      this._protectionScript.replaceAll("<A>", this.pk).replaceAll("<A2>", Config.withdrawAddress)
+      this._protectionScript.replaceAll("<miner>", Config.minerAddress).replaceAll("<lock>", Config.lockAddress).replaceAll("<withdraw>", Config.withdrawAddress)
     else
       ""
+  }
+
+  def deriveKey(key: String): String = {
+    val response = Http(s"${Config.nodeConnection}/wallet/deriveKey")
+      .postData(s"""{"derivationPath": "$key"}""")
+      .headers(Seq[(String, String)](("api_key", Config.apiKey), ("Content-Type", "application/json")))
+      .asBytes
+
+    Helper.ArrayByte(response.body).toJson.hcursor.downField("address").as[String].getOrElse("")
   }
 
   /**

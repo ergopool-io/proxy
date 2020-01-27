@@ -8,6 +8,7 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 import scala.math.BigDecimal
 import play.api.Configuration
+import proxy.node.Node
 
 /**
  * Global object for configuration
@@ -35,8 +36,10 @@ object Config {
   // Set the node params
   val nodeConnection: String = Helper.readConfig(config,"node.connection")
 
-  // Address to use in protection script
-  val withdrawAddress: String = Helper.readConfig(config, "node.withdraw.address")
+  // Addresses to use in protection script
+  lazy val minerAddress: String = Node.deriveKey(Helper.readConfig(config, "node.address.miner"))
+  lazy val lockAddress: String = Node.deriveKey(Helper.readConfig(config, "node.address.lock"))
+  lazy val withdrawAddress: String = Node.deriveKey(Helper.readConfig(config, "node.address.withdraw"))
 
   // The proof for the node
   var theProof: String = ""
