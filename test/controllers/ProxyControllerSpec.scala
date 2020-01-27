@@ -7,9 +7,12 @@ import play.api.test.Helpers._
 import org.scalatest.BeforeAndAfterAll
 import play.api.libs.Files.SingletonTemporaryFileCreator
 import play.api.mvc.RawBuffer
+import proxy.node.Node
 import proxy.{Config, PoolShareQueue}
 import proxy.status.{ProxyStatus, StatusType}
 import testservers.{NodeServlets, PoolServerServlets, TestNode, TestPoolServer}
+
+import scala.util.{Failure, Try}
 
 /**
  * Check if proxy server would pass any POST or GET requests with their header and body with any route to that route of the specified node
@@ -175,9 +178,59 @@ class ProxyControllerSpec extends PlaySpec with BeforeAndAfterAll {
 
   /** Check get candidate requests */
   "ProxyController getMiningCandidate" should {
+    /**
+     * Purpose: Check mining would be disabled when there is not enough boxes
+     * Prerequisites: Check test node and test pool server connections in test.conf.
+     * Scenario: It sends a fake GET request to `/mining/candidate` and passes it to the app.
+     *           Then as it's a new block header and proof is null but there is not enough boxes, it will throw
+     *           exception and disable mining
+     * Test Conditions:
+     * * exception is thrown
+     */
+    "throw exception when there is not enough boxes" in {
+      PoolShareQueue.resetQueue()
+
+      val msg: String = "First_msg"
+      NodeServlets.msg = msg
+      Config.blockHeader = ""
+
+      NodeServlets.proof = "null"
+
+      NodeServlets.unspentBoxes =
+        s"""
+           |[
+           |  {
+           |    "box": {
+           |      "boxId": "1ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117",
+           |      "value": 60500000000
+           |    },
+           |    "address": "${NodeServlets.protectionAddress}"
+           |  },
+           |  {
+           |    "box": {
+           |      "boxId": "1ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117",
+           |      "value": 147
+           |    },
+           |    "address": "another_address"
+           |  }
+           |]
+           |""".stripMargin
+      Node.createProtectionScript()
+      Node.fetchUnspentBoxes()
+      val bytes: ByteString = ByteString("")
+      val triedStatement = Try {
+        controller.getMiningCandidate.action.apply(FakeRequest(GET, "/mining/candidate").withBody[RawBuffer](RawBuffer(bytes.size, SingletonTemporaryFileCreator, bytes)))
+      }
+      ProxyStatus.reset()
+      triedStatement match {
+        case Failure(_) =>
+        case _ =>
+          fail("Expected to throw exception but didn't")
+      }
+    }
 
     /**
-     * Purpose: Check proof will be created when it's null
+     * Purpose: Check proof will be created when it's null and there is enough boxes
      * Prerequisites: Check test node and test pool server connections in test.conf.
      * Scenario: It sends a fake GET request to `/mining/candidate` and passes it to the app.
      *           Then as it's a new block header and proof is null, `/wallet/transaction/generate` and `/mining/candidateWithTxs` should being called.
@@ -187,7 +240,7 @@ class ProxyControllerSpec extends PlaySpec with BeforeAndAfterAll {
      * * Content is equal to bodyCheck variable
      * * proof of TestNode must not be equal to "null" string
      */
-    "return 200 status code with new header and generate proof" in {
+    "return 200 status code with new header and generate proof when there is enough boxes" in {
       PoolShareQueue.resetQueue()
 
       val msg: String = "First_msg"
@@ -195,6 +248,34 @@ class ProxyControllerSpec extends PlaySpec with BeforeAndAfterAll {
 
       NodeServlets.proof mustBe "null"
 
+      NodeServlets.unspentBoxes =
+        s"""
+           |[
+           |  {
+           |    "box": {
+           |      "boxId": "1ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117",
+           |      "value": 60500000000
+           |    },
+           |    "address": "${NodeServlets.protectionAddress}"
+           |  },
+           |  {
+           |    "box": {
+           |      "boxId": "1ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117",
+           |      "value": 7501000000
+           |    },
+           |    "address": "${NodeServlets.protectionAddress}"
+           |  },
+           |  {
+           |    "box": {
+           |      "boxId": "1ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117",
+           |      "value": 147
+           |    },
+           |    "address": "another_address"
+           |  }
+           |]
+           |""".stripMargin
+      Node.createProtectionScript()
+      Node.fetchUnspentBoxes()
       val bytes: ByteString = ByteString("")
       val response = controller.getMiningCandidate.action.apply(FakeRequest(GET, "/mining/candidate").withBody[RawBuffer](RawBuffer(bytes.size, SingletonTemporaryFileCreator, bytes)))
 

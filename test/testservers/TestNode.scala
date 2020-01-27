@@ -4,7 +4,6 @@ import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 import org.eclipse.jetty.server.Server
 import org.eclipse.jetty.servlet.ServletHandler
 import helpers.Helper
-import proxy.Config
 
 class TestNode(port: Int) extends TestJettyServer {
   override val serverPort: Int = port
@@ -24,7 +23,9 @@ class TestNode(port: Int) extends TestJettyServer {
   handler.addServletWithMapping(classOf[NodeServlets.SwaggerConfigServlet], "/api-docs/swagger.conf")
   handler.addServletWithMapping(classOf[NodeServlets.InfoServlet], "/info")
   handler.addServletWithMapping(classOf[NodeServlets.P2SAddress], "/script/p2sAddress")
-  handler.addServletWithMapping(classOf[NodeServlets.WalletUnspentBoxes], "/wallet/boxes/unspent")
+  handler.addServletWithMapping(classOf[NodeServlets.UTXOByIdBinaryServlet], "/utxo/byIdBinary/*")
+  handler.addServletWithMapping(classOf[NodeServlets.WalletTransactionByIdServlet], "/wallet/transactionById")
+  handler.addServletWithMapping(classOf[NodeServlets.WalletBoxesUnspentServlet], "/wallet/boxes/unspent")
 }
 
 object NodeServlets {
@@ -72,6 +73,25 @@ object NodeServlets {
       |  ],
       |  "size": 0
       |}
+      |""".stripMargin
+  var unspentBoxes: String =
+    s"""
+      |[
+      |  {
+      |    "box": {
+      |      "boxId": "1ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117",
+      |      "value": 60500000000
+      |    },
+      |    "address": "$protectionAddress"
+      |  },
+      |  {
+      |    "box": {
+      |      "boxId": "1ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117",
+      |      "value": 147
+      |    },
+      |    "address": "another_address"
+      |  }
+      |]
       |""".stripMargin
 
   class ProxyServlet extends HttpServlet {
@@ -137,7 +157,20 @@ object NodeServlets {
   }
 
   class MiningCandidateWithTxsServlet extends HttpServlet {
-    val reqBodyCheck: String =
+    val reqBodyCheckTwoTransaction: String =
+      s"""
+         |[
+         |  {
+         |    "transaction": $transactionResponse,
+         |    "cost": 50000
+         |  },
+         |  {
+         |    "transaction": $transactionResponse,
+         |    "cost": 50000
+         |  }
+         |]
+         |""".stripMargin.replaceAll("\\s", "")
+    val reqBodyCheckOneTransaction: String =
       s"""
          |[
          |  {
@@ -149,7 +182,7 @@ object NodeServlets {
     override protected def doPost(req: HttpServletRequest, resp: HttpServletResponse): Unit = {
       val body: String = Helper.readHttpServletRequestBody(req).replaceAll("\\s", "")
       resp.setContentType("application/json")
-      if (body == reqBodyCheck) {
+      if (body == reqBodyCheckOneTransaction || body == reqBodyCheckTwoTransaction) {
         proof =
           """
             |{
@@ -182,24 +215,9 @@ object NodeServlets {
   }
 
   class WalletTransactionGenerateServlet extends HttpServlet {
-    val reqBodyCheck: String =
-      s"""
-         |{
-         |  "requests": [
-         |    {
-         |      "address": "${Config.walletAddress}",
-         |      "value": ${Config.transactionRequestsValue}
-         |    }
-         |  ],
-         |  "fee": 1000000,
-         |  "inputsRaw": []
-         |}
-         |""".stripMargin.replaceAll("\\s", "")
     override protected def doPost(req: HttpServletRequest, resp: HttpServletResponse): Unit = {
-      val body: String = Helper.readHttpServletRequestBody(req).replaceAll("\\s", "")
       resp.setContentType("application/json")
-
-      if (!failTransaction && body == reqBodyCheck) {
+      if (!failTransaction) {
         resp.setStatus(HttpServletResponse.SC_OK)
         resp.getWriter.print(transactionResponse)
       }
@@ -392,29 +410,40 @@ object NodeServlets {
     }
   }
 
-  class WalletUnspentBoxes extends HttpServlet {
+  class UTXOByIdBinaryServlet extends HttpServlet {
     override protected def doGet(req: HttpServletRequest, resp: HttpServletResponse): Unit = {
       resp.setContentType("application/json")
       resp.setStatus(HttpServletResponse.SC_OK)
       resp.getWriter.print(
-        s"""
-           |[
-           |  {
-           |    "box": {
-           |      "boxId": "1ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117",
-           |      "value": 147
-           |    },
-           |    "address": "$protectionAddress"
-           |  },
-           |  {
-           |    "box": {
-           |      "boxId": "1ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117",
-           |      "value": 147
-           |    },
-           |    "address": "another_address"
-           |  }
-           |]
-           |""".stripMargin)
+        """
+          |{
+          |  "boxId": "1ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117",
+          |  "bytes": "4ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117"
+          |}
+          |""".stripMargin)
+    }
+  }
+
+  class WalletTransactionByIdServlet extends HttpServlet {
+    override protected def doGet(req: HttpServletRequest, resp: HttpServletResponse): Unit = {
+      resp.setContentType("application/json")
+      resp.setStatus(HttpServletResponse.SC_OK)
+      resp.getWriter.print(
+        """
+          |[
+          |  {
+          |    "id": "2ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117"
+          |  }
+          |]
+          |""".stripMargin)
+    }
+  }
+
+  class WalletBoxesUnspentServlet extends HttpServlet {
+    override protected def doGet(req: HttpServletRequest, resp: HttpServletResponse): Unit = {
+      resp.setContentType("application/json")
+      resp.setStatus(HttpServletResponse.SC_OK)
+      resp.getWriter.print(unspentBoxes)
     }
   }
 }

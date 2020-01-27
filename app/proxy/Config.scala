@@ -27,6 +27,7 @@ object Config {
   var poolDifficultyFactor: BigDecimal = BigDecimal(0.0)
   var transactionRequestsValue: Long = 0
   var maxChunkSize: Short = 0
+  val transactionFee: Int = 1000000
 
   // The current block header
   var blockHeader: String = ""

@@ -71,8 +71,18 @@ object ProxyStatus {
    *
    * @param message [[String]] reason of being disabled
    */
-  final class MiningDisabledException(message: String) extends Throwable("Mining has been disabled") {
-    ProxyStatus.setStatus(StatusType.red, "Mining", message)
+  final class MiningDisabledException(message: String, subCategory: String = null) extends Throwable("Mining has been disabled") {
+    val category: String = if (subCategory != null) s"Mining - $subCategory" else "Mining"
+    ProxyStatus.setStatus(StatusType.red, category, message)
+  }
+
+  /**
+   * Exception for not enough boxes exception on transaction generate
+   *
+   * @param message [[String]] reason of being disabled
+   */
+  final class NotEnoughBoxesException(message: String) extends Throwable("Not enough boxes on transaction generate") {
+    ProxyStatus.setStatus(StatusType.yellow, "Mining - NotEnoughBoxes", message)
   }
 
   /**

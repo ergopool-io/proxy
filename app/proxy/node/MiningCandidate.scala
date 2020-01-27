@@ -18,6 +18,7 @@ class MiningCandidate(response: Response) {
    * @return
    */
   def getResponse: String = {
+    Node.checkRemainBoxesTransaction()
     try {
       checkHeader()
     }
@@ -119,7 +120,7 @@ class MiningCandidate(response: Response) {
    */
   private def createProof(pk: String): Json = {
     try {
-      val generatedTransaction: HttpResponse[Array[Byte]] = Node.generateTransaction()
+      val generatedTransaction: HttpResponse[Array[Byte]] = Node.generateTransactionWithUnspentBoxes()
 
       if (!generatedTransaction.isSuccess) {
         Logger.error(s"generateTransaction failed: ${Node.parseErrorResponse(generatedTransaction)}")
@@ -130,7 +131,12 @@ class MiningCandidate(response: Response) {
       val transactionValidation: HttpResponse[Array[Byte]] = Pool.sendTransaction(pk, transaction)
 
       if (transactionValidation.isSuccess) {
+        Node.addTransaction(Transaction(generatedTransaction.body))
+
+        Node.handleRemainUnspentBoxes()
+
         val candidateWithTxsResponse = Node.candidateWithTxs(transaction)
+        Node.resetTxsList()
         if (candidateWithTxsResponse.isSuccess)
           resp = Response(candidateWithTxsResponse)
         else

@@ -4,7 +4,8 @@ import akka.util.ByteString
 import play.api.http.HttpEntity
 import play.api.mvc._
 import proxy.PoolShareQueue
-import proxy.status.ProxyStatus
+import proxy.node.Node
+import proxy.status.{ProxyStatus, StatusType}
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -16,6 +17,13 @@ import scala.concurrent.{ExecutionContext, Future}
 case class MiningAction[A](action: Action[A]) extends Action[A] with play.api.Logging {
   def apply(request: Request[A]): Future[Result] = {
     if (!ProxyStatus.isWorking) {
+      if (ProxyStatus.category == "Mining - TxsGen") {
+        if (Node.gapTransaction.isMined) {
+          Node.fetchUnspentBoxes()
+          ProxyStatus.setStatus(StatusType.green)
+          return action(request)
+        }
+      }
       Future.successful(
         Result(
           header = ResponseHeader(500),
