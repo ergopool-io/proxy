@@ -47,6 +47,6 @@ assemblyMergeStrategy in assembly := {
 
 javaOptions in Test += "-Dconfig.file=conf/test.conf"
 
-coverageExcludedPackages := "<empty>;.*List.*;.*MiningAction.*;.*Logger.*;.*Helper.*;.*MiningDisabledException.*;.*PoolRequestException.*;.*route.*;.*Route.*;.*EagerLoaderModule.*;.*StartupService.*"
+coverageExcludedPackages := "<empty>;.*List.*;.*MiningAction.*;.*Logger.*;.*Helper.*;.*MiningDisabledException.*;.*NotEnoughBoxesException.*;.*PoolRequestException.*;.*route.*;.*Route.*;.*EagerLoaderModule.*;.*StartupService.*"
 coverageMinimum := 85
 coverageFailOnMinimum := true

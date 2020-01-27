@@ -5,24 +5,40 @@ import io.circe.{ACursor, HCursor, Json}
 import play.api.mvc.{RawBuffer, Request}
 import proxy.{Config, Response}
 import scalaj.http.{Http, HttpResponse}
+import proxy.status.ProxyStatus.{MiningDisabledException, NotEnoughBoxesException}
 
 object Node {
   var pk: String = ""
   var unspentBoxes: Vector[Box] = _
   private var _lastProtectionAddress: String = _
-
-  def lastProtectionAddress: String = _lastProtectionAddress
-
+  private var remainBoxesTransaction: Transaction = _
+  private var txsList: Vector[Transaction] = Vector[Transaction]()
+  private var _gapTransaction: Transaction = _
   private val _protectionScript: String =
     """
       |{"source": "(proveDlog(CONTEXT.preHeader.minerPk).propBytes == PK(\"<A>\").propBytes && PK(\"<A>\"))|| PK(\"<A2>\")"}
       |""".stripMargin
+
+  def gapTransaction: Transaction = _gapTransaction
+
+  def lastProtectionAddress: String = {
+    if (_lastProtectionAddress == null)
+      this.createProtectionScript()
+    _lastProtectionAddress
+  }
 
   private def protectionScript: String = {
     if (pk != "")
       this._protectionScript.replaceAll("<A>", this.pk).replaceAll("<A2>", Config.withdrawAddress)
     else
       ""
+  }
+
+  /**
+   * Clear txs list
+   */
+  def resetTxsList(): Unit = {
+    this.txsList = Vector[Transaction]()
   }
 
   private[this] var _proof: String = ""
@@ -125,19 +141,22 @@ object Node {
    *
    * @return [[HttpResponse]]
    */
-  def generateTransaction(): HttpResponse[Array[Byte]] = {
+  def generateTransaction(address: String = Config.walletAddress,
+                          value: Long = Config.transactionRequestsValue,
+                          inputsRaw: Vector[Box] = null):
+  HttpResponse[Array[Byte]] = {
     val reqHeaders: Seq[(String, String)] = Seq(("api_key", Config.apiKey), ("Content-Type", "application/json"))
     val transactionGenerateBody: String =
       s"""
          |{
          |  "requests": [
          |    {
-         |      "address": "${Config.walletAddress}",
-         |      "value": ${Config.transactionRequestsValue}
+         |      "address": "$address",
+         |      "value": $value
          |    }
          |  ],
-         |  "fee": 1000000,
-         |  "inputsRaw": []
+         |  "fee": ${Config.transactionFee},
+         |  "inputsRaw": [${if (inputsRaw != null) inputsRaw.map(f => s""""${f.bytes}"""").mkString(",") else ""}]
          |}
          |""".stripMargin
     Http(s"${Config.nodeConnection}/wallet/transaction/generate").headers(reqHeaders).postData(transactionGenerateBody).asBytes
@@ -154,10 +173,7 @@ object Node {
     val candidateWithTxsBody: String =
       s"""
          |[
-         |  {
-         |    "transaction": $transaction,
-         |    "cost": 50000
-         |  }
+         |  ${this.txsList.map(tx => s"""{"transaction": ${tx.details}, "cost": 50000}""").mkString(",")}
          |]
          |""".stripMargin
     val response = Http(s"${Config.nodeConnection}/mining/candidateWithTxs").headers(reqHeaders).postData(candidateWithTxsBody).asBytes
@@ -202,15 +218,120 @@ object Node {
       this.unspentBoxes = Helper.ArrayByte(response.body).toJson.asArray.getOrElse(Vector())
         .filter(item => {
           val boxAddress = item.hcursor.downField("address").as[String].getOrElse("")
-          boxAddress == this._lastProtectionAddress
+          boxAddress == this.lastProtectionAddress
         })
         .map(item => {
           val cursor = item.hcursor
           val boxInfo = cursor.downField("box").as[Json].getOrElse(Json.Null).hcursor
           val boxId = boxInfo.downField("boxId").as[String].getOrElse("")
-          val amount = boxInfo.downField("value").as[Long].getOrElse(0L)
-          Box(boxId, amount)
+          val value = boxInfo.downField("value").as[Long].getOrElse(0L)
+          new Box(boxId, value)
         })
+    }
+  }
+
+  /**
+   * Add the transaction to the transactions list
+   * @param transaction [[Transaction]] the transaction to add
+   */
+  def addTransaction(transaction: Transaction): Unit = {
+    this.txsList = this.txsList :+ transaction
+  }
+
+  /**
+   * Check remain boxes transaction and add it to the transaction list if it had been mined
+   */
+  def checkRemainBoxesTransaction(): Unit = {
+    if (this.remainBoxesTransaction != null && this.remainBoxesTransaction.isMined) {
+      this.addTransaction(this.remainBoxesTransaction)
+      this.remainBoxesTransaction = null
+    }
+  }
+
+  /**
+   * Get total value of unspent boxes
+   *
+   * @return [[Long]]
+   */
+  def unspentBoxesTotalValue: Long = {
+    var total = 0L
+    this.unspentBoxes.filter(f => !f.spent).foreach(f => total = total + f.boxValue)
+    total
+  }
+
+  /**
+   * Get total value of all boxes
+   *
+   * @return [[Long]]
+   */
+  def boxesTotalValue: Long = {
+    var total = 0L
+    this.unspentBoxes.foreach(f => total = total + f.boxValue)
+    total
+  }
+
+  /**
+   * Sum of transaction fee and transaction requests value
+   *
+   * @return [[Long]]
+   */
+  private def configuredTransactionTotalValue: Long = Config.transactionFee + Config.transactionRequestsValue
+
+  /**
+   * Check whether throw a NotEnoughBoxesException or a MiningDisableException from the response detail
+   *
+   * @param response [[HttpResponse]] the response to check
+   * @return [[Throwable]]
+   */
+  private def notEnoughBoxesOrMiningDisable(response: HttpResponse[Array[Byte]]): Throwable = {
+    val errorMsg = parseErrorResponse(response)
+    if (errorMsg.map(_.toLower).contains("not enough boxes"))
+      new NotEnoughBoxesException("Not enough boxes on remain boxes transaction")
+    else
+      new MiningDisabledException(s"Transaction for remain boxes failed: $errorMsg")
+  }
+
+  /**
+   * Generate a transaction with unspent boxes
+   * Throw MiningDisableException if there's not enough boxes
+   *
+   * @return [[HttpResponse]]
+   */
+  def generateTransactionWithUnspentBoxes(): HttpResponse[Array[Byte]] = {
+    if (this.boxesTotalValue < this.configuredTransactionTotalValue) {
+      val response = this.generateTransaction(address = this.lastProtectionAddress, value = Config.transactionRequestsValue - this.boxesTotalValue)
+      if (response.isSuccess) {
+        this._gapTransaction = Transaction(response.body)
+        throw new MiningDisabledException("Should wait until transaction being mined", "TxsGen")
+      } else {
+        throw notEnoughBoxesOrMiningDisable(response)
+      }
+    }
+    var total = 0L
+    var boxesNeededForTransaction = Vector[Box]()
+    this.unspentBoxes.iterator.takeWhile(_ => total <= this.configuredTransactionTotalValue).foreach(box => {
+      total = total + box.boxValue
+      boxesNeededForTransaction = boxesNeededForTransaction :+ box
+      box.spent = true
+    })
+
+    this.generateTransaction(address = Config.walletAddress, inputsRaw = boxesNeededForTransaction)
+  }
+
+  /**
+   * Generate a transaction for the remain boxes if needed
+   */
+  def handleRemainUnspentBoxes(): Unit = {
+    if (this.unspentBoxesTotalValue < this.configuredTransactionTotalValue) {
+      val response = this.generateTransaction(
+        address = this.lastProtectionAddress,
+        value = Config.transactionRequestsValue - this.unspentBoxesTotalValue
+      )
+      if (response.isSuccess) {
+        this.remainBoxesTransaction = Transaction(response.body)
+      } else {
+        throw notEnoughBoxesOrMiningDisable(response)
+      }
     }
   }
 }
