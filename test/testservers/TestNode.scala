@@ -252,7 +252,26 @@ object NodeServlets {
           |  license:
           |    name: CC0 1.0 Universal
           |    url: https://raw.githubusercontent.com/ergoplatform/ergo/master/LICENSE
-          |
+          |paths:
+          |  /info:
+          |    get:
+          |      tags:
+          |      - info
+          |      summary: Get the information about the Node
+          |      operationId: getNodeInfo
+          |      responses:
+          |        200:
+          |          description: Node info object
+          |          content:
+          |            application/json:
+          |              schema:
+          |                $ref: '#/components/schemas/NodeInfo'
+          |        default:
+          |          description: Error
+          |          content:
+          |            application/json:
+          |              schema:
+          |                $ref: '#/components/schemas/ApiError'
           |components:
           |  securitySchemes:
           |    ApiKeyAuth:
