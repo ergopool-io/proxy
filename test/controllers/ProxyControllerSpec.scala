@@ -448,6 +448,143 @@ class ProxyControllerSpec extends PlaySpec with BeforeAndAfterAll {
         |servers:
         |- url: /
         |paths:
+        |  /info:
+        |    get:
+        |      tags:
+        |      - info
+        |      summary: Get the information about the Node
+        |      operationId: getNodeInfo
+        |      responses:
+        |        200:
+        |          description: Node info object
+        |          content:
+        |            application/json:
+        |              schema:
+        |                $ref: '#/components/schemas/NodeInfo'
+        |        default:
+        |          description: Error
+        |          content:
+        |            application/json:
+        |              schema:
+        |                $ref: '#/components/schemas/ApiError'
+        |  /proxy/test:
+        |    get:
+        |      tags:
+        |      - proxy
+        |      summary: Test proxy is working
+        |      responses:
+        |        200:
+        |          description: Proxy is working
+        |          content:
+        |            application/json:
+        |              schema:
+        |                $ref: '#/components/schemas/ProxySuccess'
+        |        500:
+        |          description: Exception happened when testing proxy
+        |          content:
+        |            application/json:
+        |              schema:
+        |                required:
+        |                - messages
+        |                - success
+        |                type: object
+        |                properties:
+        |                  success:
+        |                    type: boolean
+        |                    description: True if operation was successful
+        |                    example: false
+        |                  message:
+        |                    type: array
+        |                    description: List of reasons of failure
+        |                    items:
+        |                      type: string
+        |                      description: error messages during the test
+        |        default:
+        |          description: Exception happened when testing proxy
+        |          content:
+        |            application/json:
+        |              schema:
+        |                required:
+        |                - messages
+        |                - success
+        |                type: object
+        |                properties:
+        |                  success:
+        |                    type: boolean
+        |                    description: True if operation was successful
+        |                    example: false
+        |                  message:
+        |                    type: array
+        |                    description: List of reasons of failure
+        |                    items:
+        |                      type: string
+        |                      description: error messages during the test
+        |  /proxy/status/reset:
+        |    post:
+        |      tags:
+        |      - proxy
+        |      summary: Reset status of proxy
+        |      responses:
+        |        200:
+        |          description: Status reset successfully
+        |          content:
+        |            application/json:
+        |              schema:
+        |                $ref: '#/components/schemas/ProxySuccess'
+        |        500:
+        |          description: Reset status failed
+        |          content:
+        |            application/json:
+        |              schema:
+        |                required:
+        |                - message
+        |                - success
+        |                type: object
+        |                properties:
+        |                  success:
+        |                    type: boolean
+        |                    description: True if operation was successful
+        |                    example: false
+        |                  message:
+        |                    type: string
+        |                    description: reason of failure in operation
+        |                    example: Something happened
+        |        default:
+        |          description: Reset status failed
+        |          content:
+        |            application/json:
+        |              schema:
+        |                required:
+        |                - message
+        |                - success
+        |                type: object
+        |                properties:
+        |                  success:
+        |                    type: boolean
+        |                    description: True if operation was successful
+        |                    example: false
+        |                  message:
+        |                    type: string
+        |                    description: reason of failure in operation
+        |                    example: Something happened
+        |  /proxy/config/reload:
+        |    post:
+        |      tags:
+        |      - proxy
+        |      summary: Reload proxy config from the pool server
+        |      responses:
+        |        200:
+        |          description: Config reloaded
+        |          content:
+        |            application/json:
+        |              schema:
+        |                $ref: '#/components/schemas/ProxySuccess'
+        |        default:
+        |          description: Config reloaded
+        |          content:
+        |            application/json:
+        |              schema:
+        |                $ref: '#/components/schemas/ProxySuccess'
         |  /mining/candidate:
         |    get:
         |      tags:
@@ -597,6 +734,15 @@ class ProxyControllerSpec extends PlaySpec with BeforeAndAfterAll {
         |          type: string
         |          description: Detailed error description
         |          nullable: true
+        |    ProxySuccess:
+        |      required:
+        |      - success
+        |      type: object
+        |      properties:
+        |        success:
+        |          type: boolean
+        |          description: True if operation was successful
+        |          example: true
         |  securitySchemes:
         |    ApiKeyAuth:
         |      type: apiKey
