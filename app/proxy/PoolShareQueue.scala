@@ -1,23 +1,26 @@
 package proxy
 
-import helpers.{Helper, List}
 import io.circe.Json
 import proxy.loggers.Logger
 import scalaj.http.{Http, HttpResponse}
 import io.circe.syntax._
+import proxy.node.{Node, Proof, Share, Transaction}
 
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
+import scala.util.control.Breaks._
 
 /**
  * Queue for sending pool request asynchronously
  * It tries to send each request in the queue until it's empty
  */
 class PoolShareQueue {
-  private val queue: mutable.Queue[Json] = mutable.Queue.empty
+  private val queue: mutable.Queue[Either[Share, (Transaction, Proof)]] = mutable.Queue.empty
   private var _lock: Boolean = false
   private var isRunning: Boolean = false
+  private var transaction: Transaction = _
+  private var proof: Proof = _
 
   /**
    * Lock the queue
@@ -51,14 +54,50 @@ class PoolShareQueue {
   }
 
   /**
+   * Add element to the queue
+   *
+   * @param elem element to add to queue
+   */
+  def push(elem: Either[Share, (Transaction, Proof)]): Unit = {
+    this.queue.enqueue(elem)
+  }
+
+  /**
+   * Add elements to the queue
+   *
+   * @param elems iterable of shares
+   */
+  def push(elems: Iterable[Either[Share, (Transaction, Proof)]]): Unit = {
+    this.queue.enqueueAll(elems)
+  }
+
+  /**
    * Sends requests to the pool server
    *
    * @param onGoingQueue [[mutable.Queue]] request to send
    * @return response from the pool
    */
   private def send(onGoingQueue: mutable.Queue[Json]): HttpResponse[Array[Byte]] = {
-    Http(s"${Config.poolConnection}${Config.poolServerSolutionRoute}").header("Content-Type", "application/json").postData(onGoingQueue.asJson.toString()).asBytes
+    Http(s"${Config.poolConnection}${Config.poolServerSolutionRoute}")
+      .header("Content-Type", "application/json")
+      .postData(
+        s"""
+          |{
+          |    "addresses": {
+          |        "miner": ${Config.minerAddress},
+          |        "lock": ${Config.lockAddress},
+          |        "withdraw": ${Config.withdrawAddress}
+          |    },
+          |    "pk": ${Node.pk},
+          |    "transaction": ${this.transaction.details},
+          |    "proof": ${this.proof.body},
+          |    "shares": ${onGoingQueue.asJson}
+          |}
+          |""".stripMargin).asBytes
   }
+
+  private def isTxsP(elem: Either[Share, (Transaction, Proof)]): Boolean = elem.isInstanceOf[Right[Share, (Transaction, Proof)]]
+  private def isShare(elem: Either[Share, (Transaction, Proof)]): Boolean = elem.isInstanceOf[Left[Share, (Transaction, Proof)]]
 
   /**
    * Tries to send requests to the pool until the queue is empty
@@ -68,23 +107,47 @@ class PoolShareQueue {
     Future {
       this.isRunning = true
       while (queue.nonEmpty) {
-        try {
-          val items = queue.take(Config.maxChunkSize)
+        breakable {
+          try {
+            if (isTxsP(queue.head)) {
+              val t = queue.dequeue().getOrElse(0).asInstanceOf[(Transaction, Proof)]
+              if (t._1 != null) this.transaction = t._1
+              this.proof = t._2
+            }
+            if (this.transaction == null || this.proof == null) {
+              queue.dequeueWhile(f => isShare(f))
+              break
+            }
 
-          if (items.nonEmpty) { // In case of queue was cleared between while condition and take action
-            val response: HttpResponse[Array[Byte]] = send(items)
+            val items = queue
+              .take(Config.maxChunkSize)
+              .takeWhile(p => isShare(p))
+              .map(f => f.left.getOrElse(null).body)
 
-            // Pop request if it's accepted or rejected
-            if (response.isSuccess || response.isClientError) this.popNItem(items.length)
-            else Thread.sleep(5000)
+            if (items.nonEmpty) { // In case of queue was cleared between while condition and take action
+              val response: HttpResponse[Array[Byte]] = send(items)
+
+              // Pop request if it's accepted or rejected
+              if (response.isSuccess) this.popNItem(items.length)
+              else if (response.isClientError) {
+                queue.dequeueWhile(f => isShare(f))
+                this.transaction = null
+                this.proof = null
+              }
+              else Thread.sleep(5000)
+            }
           }
-        }
-        catch {
-          case e: Throwable =>
-            Logger.error("Error occurred when tried to send request to pool", e)
+          catch {
+            case e: Throwable =>
+              Logger.error("Error occurred when tried to send request to pool", e)
+          }
         }
       }
       this.isRunning = false
+
+      if (this.transaction == null && this.proof == null && queue.isEmpty) {
+        Node.createProof()
+      }
     }
   }
 }
@@ -102,10 +165,10 @@ object PoolShareQueue {
   /**
    * Add request to the queue
    *
-   * @param share [[String]] body of request
+   * @param share [[Share]] body of request
    */
-  def push(share: String): Unit = {
-    this.cls.queue.enqueue(Helper.convertToJson(share))
+  def push(share: Share): Unit = {
+    this.cls.push(Left(share))
     runQueue()
   }
 
@@ -114,9 +177,19 @@ object PoolShareQueue {
    *
    * @param shares [[Iterable]] iterable of shares
    */
-  def push(shares: Iterable[String]): Unit = {
-    this.cls.queue.enqueueAll(shares.map(s => Helper.convertToJson(s)))
+  def push(shares: Iterable[Share]): Unit = {
+    this.cls.push(shares.map(f => Left(f)))
     runQueue()
+  }
+
+  /**
+   * Add transaction and proof to the queue
+   *
+   * @param txs [[Transaction]] transaction to add
+   * @param proof [[Proof]] proof to add
+   */
+  def push(txs: Transaction, proof: Proof): Unit = {
+    this.cls.push(Right((txs, proof)))
   }
 
   /**
@@ -140,11 +213,11 @@ object PoolShareQueue {
   }
 
   /**
-   * Return size of queue
-   * @return [[Int]]
+   * Count of shares in the queue
+   * @return
    */
-  def length: Int = {
-    this.cls.queue.length
+  def sharesCount: Int = {
+    this.cls.queue.count(p => this.cls.isShare(p))
   }
 
   /**
@@ -153,21 +226,5 @@ object PoolShareQueue {
   def resetQueue(): Unit = {
     this.cls.queue.clear()
     this.cls.unlock()
-  }
-
-  /**
-   * Check if queue is not empty
-   * @return [[Boolean]]
-   */
-  def isNonEmpty: Boolean = {
-    this.cls.queue.nonEmpty
-  }
-
-  /**
-   * Wait until queue is empty
-   * sleep for 0.5s if is not
-   */
-  def waitUntilEmptied(): Unit = {
-    while (this.isNonEmpty) Thread.sleep(500)
   }
 }

@@ -34,7 +34,7 @@ class ProxyServiceSpec extends PlaySpec {
       val response = ProxyService.getShareRequestBody(fakeRequest)
 
       response.size mustBe 1
-      response.foreach(item => item.replaceAll("\\s", "") mustBe
+      response.foreach(item => item.body.toString().replaceAll("\\s", "") mustBe
         """
           |{
           |  "pk": "0350e25cee8562697d55275c96bb01b34228f9bd68fd9933f2a25ff195526864f5",
@@ -77,7 +77,7 @@ class ProxyServiceSpec extends PlaySpec {
       val response = ProxyService.getShareRequestBody(fakeRequest)
 
       response.size mustBe 2
-      response.foreach(item => item.replaceAll("\\s", "") mustBe
+      response.foreach(item => item.body.toString().replaceAll("\\s", "") mustBe
         """
           |{
           |  "pk": "0350e25cee8562697d55275c96bb01b34228f9bd68fd9933f2a25ff195526864f5",

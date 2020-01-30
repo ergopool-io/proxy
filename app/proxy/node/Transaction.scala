@@ -22,8 +22,6 @@ case class Transaction(id: String, details: Json) {
 }
 
 object Transaction {
-  def apply(txsId: String, txsDetails: Json): Transaction = new Transaction(txsId, txsDetails)
-
   def apply(responseBody: Array[Byte]): Transaction = {
     val jsonBody = Helper.ArrayByte(responseBody).toJson
     val txsId = jsonBody.hcursor.downField("id").as[String].getOrElse("")

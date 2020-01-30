@@ -1,9 +1,11 @@
 package proxy.node
 
 import helpers.Helper
-import io.circe.{ACursor, HCursor, Json}
+import io.circe.{HCursor, Json}
 import play.api.mvc.{RawBuffer, Request}
-import proxy.{Config, Response}
+import proxy.loggers.Logger
+import proxy.status.ProxyStatus
+import proxy.{Config, PoolShareQueue, Response}
 import scalaj.http.{Http, HttpResponse}
 import proxy.status.ProxyStatus.{MiningDisabledException, NotEnoughBoxesException}
 
@@ -48,32 +50,6 @@ object Node {
    */
   def resetTxsList(): Unit = {
     this.txsList = Vector[Transaction]()
-  }
-
-  private[this] var _proof: String = ""
-  def proof: String = _proof
-
-  /**
-   * Update value of proof
-   *
-   * @param value [[String]] response of candidateWithTxs or miningCandidate with proof
-   */
-  def proof_=(value: String): Unit = {
-    if (value != "") {
-      val proofValue = Helper.convertToJson(value)
-      val cursor: ACursor = proofValue.hcursor
-      val txProof: ACursor = cursor.downField("txProofs").downArray
-
-      _proof =
-      s"""
-         |{
-         |    "pk": "${this.pk}",
-         |    "msg_pre_image": "${cursor.downField("msgPreimage").as[String].getOrElse("")}",
-         |    "leaf": "${txProof.downField("leaf").as[String].getOrElse("")}",
-         |    "levels": ${txProof.downField("levels").as[Json].getOrElse(Json.Null)}
-         |}
-         |""".stripMargin
-    }
   }
 
   /**
@@ -341,6 +317,50 @@ object Node {
       } else {
         throw notEnoughBoxesOrMiningDisable(response)
       }
+    }
+  }
+
+  /**
+   * Generate transaction and make a new proof
+   *
+   * @return [[Proof]] The body with proof
+   */
+  def createProof(): Response = {
+    try {
+      PoolShareQueue.lock()
+      val generatedTransaction: HttpResponse[Array[Byte]] = this.generateTransactionWithUnspentBoxes()
+
+      if (!generatedTransaction.isSuccess) {
+        Logger.error(s"generateTransaction failed: ${this.parseErrorResponse(generatedTransaction)}")
+        throw new ProxyStatus.MiningDisabledException(s"Route /wallet/transaction/generate failed with error code ${generatedTransaction.code}")
+      }
+
+      val transaction = Helper.ArrayByte(generatedTransaction.body).toString
+
+      this.addTransaction(Transaction(generatedTransaction.body))
+
+      this.handleRemainUnspentBoxes()
+
+      val candidateWithTxsResponse = this.candidateWithTxs(transaction)
+      this.resetTxsList()
+      if (candidateWithTxsResponse.isSuccess) {
+        val proof = Proof(Helper.ArrayByte(candidateWithTxsResponse.body).toJson.hcursor.downField("proof").as[Json].getOrElse(Json.Null))
+        PoolShareQueue.push(Transaction(generatedTransaction.body), proof)
+        Response(candidateWithTxsResponse)
+      }
+      else {
+        Logger.error(s"candidateWithTxs failed: ${this.parseErrorResponse(candidateWithTxsResponse)}")
+        null
+      }
+    }
+    catch {
+      case error: ProxyStatus.MiningDisabledException =>
+        throw new Throwable(s"Creating proof failed (${error.getMessage})", error)
+      case error: Throwable =>
+        throw new ProxyStatus.MiningDisabledException(s"Creating proof failed: ${error.getMessage}")
+    }
+    finally {
+      PoolShareQueue.unlock()
     }
   }
 }

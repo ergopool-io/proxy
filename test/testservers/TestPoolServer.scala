@@ -28,7 +28,6 @@ class TestPoolServer(port: Int) extends TestJettyServer {
 
 object PoolServerServlets {
   var gotSolution: Boolean = false
-  var gotProof: Boolean = false
   var failTransaction: Boolean = false
 
   class TransactionServlet extends HttpServlet {
@@ -146,7 +145,6 @@ object PoolServerServlets {
       val body: String = Helper.readHttpServletRequestBody(request).replaceAll("\\s", "")
       response.setContentType("application/json")
       if (body == reqBodyCheck) {
-        gotProof = true
         response.setStatus(HttpServletResponse.SC_OK)
         response.getWriter.print("{\"success\": true}")
       }
