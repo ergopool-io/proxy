@@ -13,7 +13,7 @@ import io.swagger.v3.parser.OpenAPIV3Parser
 import io.swagger.v3.oas.models.OpenAPI
 import io.swagger.v3.core.util.Yaml
 import proxy.loggers.Logger
-import proxy.node.{MiningCandidate, Node}
+import proxy.node.{MiningCandidate, Node, Share}
 import proxy.status.ProxyStatus
 import proxy.{Config, Pool, PoolShareQueue, ProxyService, ProxySwagger, Response}
 
@@ -83,8 +83,6 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
    * @return [[Result]] Response from the node
    */
   def sendSolution: MiningAction[RawBuffer] = MiningAction[RawBuffer] { Action(parse.raw) { implicit request: Request[RawBuffer] =>
-    if (!Config.lastPoolProofWasSuccess) ProxyService.sendProofToPool()
-
     // Send the request to node and get its response
     val response: Response = Node.sendSolution(request)
 
@@ -129,9 +127,7 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
    * @return [[Result]] Response from the pool server
    */
   def sendShare: MiningAction[RawBuffer] = MiningAction[RawBuffer] { Action(parse.raw) { implicit request: Request[RawBuffer] =>
-    if (!Config.lastPoolProofWasSuccess) ProxyService.sendProofToPool()
-
-    val shares: Iterable[String] = ProxyService.getShareRequestBody(request)
+    val shares: Iterable[Share] = ProxyService.getShareRequestBody(request)
 
     PoolShareQueue.push(shares)
 

@@ -10,7 +10,7 @@ import play.api.mvc.RawBuffer
 import proxy.node.Node
 import proxy.{Config, PoolShareQueue}
 import proxy.status.{ProxyStatus, StatusType}
-import testservers.{NodeServlets, PoolServerServlets, TestNode, TestPoolServer}
+import testservers.{NodeServlets, TestNode, TestPoolServer}
 
 import scala.util.{Failure, Try}
 
@@ -107,72 +107,6 @@ class ProxyControllerSpec extends PlaySpec with BeforeAndAfterAll {
       contentType(response) mustBe Some("application/json")
       while (!ProxyStatus.isHealthy) Thread.sleep(1000)
       ProxyStatus.isHealthy mustBe true
-    }
-  }
-
-  /** Check solution requests */
-  "ProxyController sendSolution" should {
-    /**
-     * Purpose: Check solution won't be sent to pool server if status is 400.
-     * Prerequisites: Check test node and test pool server connections in test.conf.
-     * Scenario: It sends a fake POST request with an invalid body to `/mining/solution` to the app.
-     *           As the solution is invalid, status would be 400 so it won't send the request to the pool server.
-     * Test Conditions:
-     * * gotSolution is false
-     * * status is `400`
-     * * Content-Type is `application/json`
-     */
-    "return 400 status code on an invalid solution" in {
-      val body: String =
-        """
-          |{
-          |  "pk": "0350e25cee8562697d55275c96bb01b34228f9bd68fd9933f2a25ff195526864f5",
-          |  "w": "An_Invalid_w",
-          |  "n": "An_Invalid_n",
-          |  "d": 4196585670338033714759641235444284559441802073000000000000000000000000000000
-          |}
-          |""".stripMargin
-      val bytes: ByteString = ByteString(body)
-      val fakeRequest = FakeRequest(POST, "/mining/solution").withHeaders("api_key" -> "some string", "Content_type" -> "application/json").withBody[RawBuffer](RawBuffer(bytes.size, SingletonTemporaryFileCreator, bytes))
-      val response = controller.sendSolution.action.apply(fakeRequest)
-
-      status(response) mustBe BAD_REQUEST
-      contentType(response) mustBe Some("application/json")
-      PoolShareQueue.length mustBe 0
-    }
-
-
-    /**
-     * Purpose: Check solution will be sent to pool server if status is 200.
-     * Prerequisites: Check test node and test pool server connections in test.conf.
-     * Scenario: It sends a fake POST request to `/mining/solution` to the app.
-     *           Status is 200 so it should send the request to the pool server.
-     * Test Conditions:
-     * * TestPoolServer.servlets.gotSolution is true
-     * * status is `200`
-     * * Content-Type is `application/json`
-     * * Content is `{"success": true}`
-     */
-    "return 200 status code on correct solution" in {
-      PoolShareQueue.resetQueue()
-
-      val body: String =
-        """
-          |{
-          |  "pk": "0350e25cee8562697d55275c96bb01b34228f9bd68fd9933f2a25ff195526864f5",
-          |  "w": "0366ea253123dfdb8d6d9ca2cb9ea98629e8f34015b1e4ba942b1d88badfcc6a12",
-          |  "n": "0000000010C006CF",
-          |  "d": 4196585670338033714759641235444284559441802073009721710293850518130743229130
-          |}
-          |""".stripMargin
-      val bytes: ByteString = ByteString(body)
-      val fakeRequest = FakeRequest(POST, "/mining/solution").withHeaders("api_key" -> "some string", "Content_type" -> "application/json").withBody[RawBuffer](RawBuffer(bytes.size, SingletonTemporaryFileCreator, bytes))
-      val response = controller.sendSolution.action.apply(fakeRequest)
-
-      status(response) mustBe OK
-      contentType(response) mustBe Some("application/json")
-      contentAsString(response) must include ("{\"success\": true}")
-      PoolShareQueue.length mustBe 1
     }
   }
 
@@ -281,18 +215,17 @@ class ProxyControllerSpec extends PlaySpec with BeforeAndAfterAll {
 
       val bodyCheck: String =
         s"""
-          |{
-          |  "msg": "$msg",
-          |  "b": 748014723576678314041035877227113663879264849498014394977645987,
-          |  "pk": "0278011ec0cf5feb92d61adb51dcb75876627ace6fd9446ab4cabc5313ab7b39a7",
-          |  "pb": 7480147235766783140410358772271136638792648494980143949776459870
-          |}
-          |""".stripMargin.replaceAll("\\s", "")
+           |{
+           |  "msg": "$msg",
+           |  "b": 748014723576678314041035877227113663879264849498014394977645987,
+           |  "pk": "0278011ec0cf5feb92d61adb51dcb75876627ace6fd9446ab4cabc5313ab7b39a7",
+           |  "pb": 7480147235766783140410358772271136638792648494980143949776459870
+           |}
+           |""".stripMargin.replaceAll("\\s", "")
 
       status(response) mustBe OK
       contentType(response) mustBe Some("application/json")
       contentAsString(response).replaceAll("\\s", "") must include (bodyCheck)
-      PoolServerServlets.gotProof mustBe true
       NodeServlets.proof must not be "null"
     }
 
@@ -313,7 +246,6 @@ class ProxyControllerSpec extends PlaySpec with BeforeAndAfterAll {
 
       val msg: String = "First_msg"
       NodeServlets.msg = msg
-      PoolServerServlets.gotProof = false
       NodeServlets.proofCreated = false
 
       val bytes: ByteString = ByteString("")
@@ -321,18 +253,17 @@ class ProxyControllerSpec extends PlaySpec with BeforeAndAfterAll {
 
       val bodyCheck: String =
         s"""
-          |{
-          |  "msg": "$msg",
-          |  "b": 748014723576678314041035877227113663879264849498014394977645987,
-          |  "pk": "0278011ec0cf5feb92d61adb51dcb75876627ace6fd9446ab4cabc5313ab7b39a7",
-          |  "pb": 7480147235766783140410358772271136638792648494980143949776459870
-          |}
-          |""".stripMargin.replaceAll("\\s", "")
+           |{
+           |  "msg": "$msg",
+           |  "b": 748014723576678314041035877227113663879264849498014394977645987,
+           |  "pk": "0278011ec0cf5feb92d61adb51dcb75876627ace6fd9446ab4cabc5313ab7b39a7",
+           |  "pb": 7480147235766783140410358772271136638792648494980143949776459870
+           |}
+           |""".stripMargin.replaceAll("\\s", "")
 
       status(response) mustBe OK
       contentType(response) mustBe Some("application/json")
       contentAsString(response).replaceAll("\\s", "") must include (bodyCheck)
-      PoolServerServlets.gotProof mustBe false
       NodeServlets.proofCreated mustBe false
     }
 
@@ -362,19 +293,87 @@ class ProxyControllerSpec extends PlaySpec with BeforeAndAfterAll {
 
       val bodyCheck: String =
         s"""
-          |{
-          |  "msg": "$msg",
-          |  "b": 748014723576678314041035877227113663879264849498014394977645987,
-          |  "pk": "0278011ec0cf5feb92d61adb51dcb75876627ace6fd9446ab4cabc5313ab7b39a7",
-          |  "pb": 7480147235766783140410358772271136638792648494980143949776459870
-          |}
-          |""".stripMargin.replaceAll("\\s", "")
+           |{
+           |  "msg": "$msg",
+           |  "b": 748014723576678314041035877227113663879264849498014394977645987,
+           |  "pk": "0278011ec0cf5feb92d61adb51dcb75876627ace6fd9446ab4cabc5313ab7b39a7",
+           |  "pb": 7480147235766783140410358772271136638792648494980143949776459870
+           |}
+           |""".stripMargin.replaceAll("\\s", "")
 
       status(response) mustBe OK
       contentType(response) mustBe Some("application/json")
       contentAsString(response).replaceAll("\\s", "") must include (bodyCheck)
-      PoolServerServlets.gotProof mustBe true
       NodeServlets.proofCreated mustBe false
+    }
+  }
+
+  /** Check solution requests */
+  "ProxyController sendSolution" should {
+    /**
+     * Purpose: Check solution won't be sent to pool server if status is 400.
+     * Prerequisites: Check test node and test pool server connections in test.conf.
+     * Scenario: It sends a fake POST request with an invalid body to `/mining/solution` to the app.
+     *           As the solution is invalid, status would be 400 so it won't send the request to the pool server.
+     * Test Conditions:
+     * * gotSolution is false
+     * * status is `400`
+     * * Content-Type is `application/json`
+     */
+    "return 400 status code on an invalid solution" in {
+      PoolShareQueue.resetQueue()
+      Node.createProof()
+
+      val body: String =
+        """
+          |{
+          |  "pk": "0350e25cee8562697d55275c96bb01b34228f9bd68fd9933f2a25ff195526864f5",
+          |  "w": "An_Invalid_w",
+          |  "n": "An_Invalid_n",
+          |  "d": 4196585670338033714759641235444284559441802073000000000000000000000000000000
+          |}
+          |""".stripMargin
+      val bytes: ByteString = ByteString(body)
+      val fakeRequest = FakeRequest(POST, "/mining/solution").withHeaders("api_key" -> "some string", "Content_type" -> "application/json").withBody[RawBuffer](RawBuffer(bytes.size, SingletonTemporaryFileCreator, bytes))
+      val response = controller.sendSolution.action.apply(fakeRequest)
+
+      status(response) mustBe BAD_REQUEST
+      contentType(response) mustBe Some("application/json")
+      PoolShareQueue.sharesCount mustBe 0
+    }
+
+
+    /**
+     * Purpose: Check solution will be sent to pool server if status is 200.
+     * Prerequisites: Check test node and test pool server connections in test.conf.
+     * Scenario: It sends a fake POST request to `/mining/solution` to the app.
+     *           Status is 200 so it should send the request to the pool server.
+     * Test Conditions:
+     * * TestPoolServer.servlets.gotSolution is true
+     * * status is `200`
+     * * Content-Type is `application/json`
+     * * Content is `{"success": true}`
+     */
+    "return 200 status code on correct solution" in {
+      PoolShareQueue.resetQueue()
+      Node.createProof()
+      val body: String =
+        """
+          |{
+          |  "pk": "0350e25cee8562697d55275c96bb01b34228f9bd68fd9933f2a25ff195526864f5",
+          |  "w": "0366ea253123dfdb8d6d9ca2cb9ea98629e8f34015b1e4ba942b1d88badfcc6a12",
+          |  "n": "0000000010C006CF",
+          |  "d": 4196585670338033714759641235444284559441802073009721710293850518130743229130
+          |}
+          |""".stripMargin
+      val bytes: ByteString = ByteString(body)
+      val fakeRequest = FakeRequest(POST, "/mining/solution").withHeaders("api_key" -> "some string", "Content_type" -> "application/json").withBody[RawBuffer](RawBuffer(bytes.size, SingletonTemporaryFileCreator, bytes))
+      val response = controller.sendSolution.action.apply(fakeRequest)
+
+      status(response) mustBe OK
+      contentType(response) mustBe Some("application/json")
+      contentAsString(response) must include ("{\"success\": true}")
+      PoolShareQueue.sharesCount mustBe 1
     }
   }
 
@@ -392,6 +391,7 @@ class ProxyControllerSpec extends PlaySpec with BeforeAndAfterAll {
      */
     "return 200 status code from pool server on new share" in {
       PoolShareQueue.resetQueue()
+      Node.createProof()
 
       val body: String =
         """
@@ -409,7 +409,7 @@ class ProxyControllerSpec extends PlaySpec with BeforeAndAfterAll {
       status(response) mustBe OK
       contentType(response) mustBe Some("application/json")
       contentAsString(response).replaceAll("\\s", "") must include ("{}")
-      PoolShareQueue.length mustBe 1
+      PoolShareQueue.sharesCount mustBe 1
     }
   }
 
