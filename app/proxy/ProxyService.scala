@@ -13,15 +13,15 @@ object ProxyService {
    * @param request [[Request]] The request to get body info
    * @return [[Iterable]]
    */
-  def getShareRequestBody(request: Request[RawBuffer]): Iterable[Share] = {
+  def getShareRequestBody(request: Request[RawBuffer]): List[Share] = {
     val reqBody: HCursor = Helper.RawBufferValue(request.body).toJson.hcursor
     val shares = reqBody.values
 
     if (shares.isEmpty) {
-      Iterable[Share](Share(reqBody))
+      List[Share](Share(reqBody))
     }
     else {
-      shares.get.map(item => Share(item.hcursor))
+      shares.get.toList.map(item => Share(item.hcursor))
     }
   }
 

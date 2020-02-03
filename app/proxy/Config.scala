@@ -17,6 +17,8 @@ object Config {
   // Default configuration for application
   val config = Configuration(ConfigFactory.load())
 
+  val playSecret: String = Helper.readConfig(config, "play.http.secret.key")
+
   // Check if a transaction generation is in process
   var genTransactionInProcess = false
 
@@ -49,6 +51,8 @@ object Config {
 
   // The pool server connection
   val poolConnection: String = Helper.readConfig(config, "pool.connection")
+
+  val mnemonicFilename: String = Helper.readConfig(config, "mnemonic.filename", "mnemonic")
 
   // The pool server routes
   val poolServerSolutionRoute: String = Helper.readConfig(config,"pool.route.solution")

@@ -6,7 +6,7 @@ version := "0.3"
 
 lazy val root = (project in file(".")).enablePlugins(PlayScala)
 
-scalaVersion := "2.13.1"
+scalaVersion := "2.12.10"
 
 libraryDependencies += guice
 libraryDependencies += "org.scalatestplus.play" %% "scalatestplus-play" % "4.0.3" % Test
@@ -26,6 +26,8 @@ libraryDependencies ++= Seq(
 )
 
 libraryDependencies += "io.swagger.parser.v3" % "swagger-parser-v3" % "2.0.8"
+
+libraryDependencies += "com.github.alanverbner" %% "bip39" % "0.1"
 
 // Assembly build plugin
 mainClass in assembly := Some("play.core.server.ProdServerStart")

@@ -13,3 +13,5 @@ target
 .vscode
 ergo-proxy.iml
 *.log
+mnemonic
+test_mnemonic

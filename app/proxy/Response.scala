@@ -46,9 +46,8 @@ object Response {
 
     // Remove the ignored headers
     val contentType = respHeaders.getOrElse("Content-Type", "")
-    val headers = respHeaders.removed("Content-Type").removed("Content-Length")
     val body = response.body
 
-    new Response(statusCode, headers, body, contentType)
+    new Response(statusCode, respHeaders, body, contentType)
   }
 }

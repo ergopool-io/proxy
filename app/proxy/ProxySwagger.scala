@@ -1,10 +1,12 @@
 package proxy
 
 import io.swagger.v3.oas.models.media.{ArraySchema, Content, MediaType, Schema}
+import io.swagger.v3.oas.models.parameters.RequestBody
 import io.swagger.v3.oas.models.responses.{ApiResponse, ApiResponses}
 import io.swagger.v3.oas.models.security.SecurityRequirement
 import io.swagger.v3.oas.models.{OpenAPI, Operation, PathItem, Paths}
-import scala.jdk.CollectionConverters._
+
+import scala.collection.JavaConverters._
 
 object ProxySwagger {
   /**
@@ -147,6 +149,10 @@ object ProxySwagger {
    * @param openAPI the openApi to use
    */
   private def addProxyEndpoints(openAPI: OpenAPI): Unit = {
+    addSaveMnemonicEndpoint(openAPI)
+
+    addLoadMnemonicEndpoint(openAPI)
+
     addConfigReload(openAPI)
 
     addStatusReset(openAPI)
@@ -359,5 +365,163 @@ object ProxySwagger {
 
     val content: Content = new Content
     content.addMediaType("application/json", mediaType)
+  }
+
+  /**
+   * Add /proxy/mnemonic/load to swagger
+   *
+   * @param openAPI the openApi to use
+   */
+  private def addLoadMnemonicEndpoint(openAPI: OpenAPI): Unit = {
+    val response200: ApiResponse = {
+      val schema: Schema[_] = new Schema()
+      schema.set$ref("#/components/schemas/ProxySuccess")
+
+      val response = new ApiResponse
+      response.setDescription("Mnemonic has been loaded successfully")
+      response.setContent(jsonContentType(schema))
+
+      response
+    }
+
+    val response400: ApiResponse = {
+      val failSchema: Schema[_] = successSchema
+      failSchema.setExample(false)
+
+      val messageSchema: Schema[_] = new Schema()
+      messageSchema.setType("string")
+      messageSchema.setDescription("reason of failure in operation")
+      messageSchema.setExample("Password is wrong. Send the right one or remove mnemonic file.")
+
+      val schema: Schema[_] = new Schema()
+      schema.setRequired(List[String]("success", "message").asJava)
+      schema.setType("object")
+      schema.setProperties(Map[String, Schema[_]]("success" -> failSchema, "message" -> messageSchema).asJava)
+
+      val response = new ApiResponse
+      response.setDescription("Couldn't load mnemonic")
+      response.setContent(jsonContentType(schema))
+
+      response
+    }
+
+    // Put 200 and 500 in responses
+    val APIResponses: ApiResponses = {
+      val responses = new ApiResponses
+
+      responses.addApiResponse("200", response200)
+      responses.addApiResponse("400", response400)
+
+      responses.setDefault(response400)
+
+      responses
+    }
+
+    // Create a post operation
+    val postOperation: Operation = {
+      val passSchema: Schema[_] = new Schema
+      passSchema.setType("string")
+      passSchema.setDescription("Password of the mnemonic file")
+      passSchema.setExample("My password")
+
+      val schema: Schema[_] = new Schema
+      schema.setProperties(Map[String, Schema[_]]("pass" -> passSchema).asJava)
+
+      val reqBody = new RequestBody
+      reqBody.setContent(jsonContentType(schema))
+
+      val op = new Operation
+      op.setSummary("Load mnemonic")
+      op.addTagsItem("proxy")
+      op.setRequestBody(reqBody)
+      op.setResponses(APIResponses)
+
+      op
+    }
+
+    // Add post Operation to paths
+    val path: PathItem = new PathItem
+    path.setPost(postOperation)
+
+    addPath(openAPI, "/proxy/mnemonic/load", path, "/info")
+  }
+
+  /**
+   * Add /proxy/mnemonic/save to swagger
+   *
+   * @param openAPI the openApi to use
+   */
+  private def addSaveMnemonicEndpoint(openAPI: OpenAPI): Unit = {
+    val response200: ApiResponse = {
+      val schema: Schema[_] = new Schema()
+      schema.set$ref("#/components/schemas/ProxySuccess")
+
+      val response = new ApiResponse
+      response.setDescription("Mnemonic has been saved into the file successfully")
+      response.setContent(jsonContentType(schema))
+
+      response
+    }
+
+    val response400: ApiResponse = {
+      val failSchema: Schema[_] = successSchema
+      failSchema.setExample(false)
+
+      val messageSchema: Schema[_] = new Schema()
+      messageSchema.setType("string")
+      messageSchema.setDescription("reason of failure in operation")
+      messageSchema.setExample("Mnemonic file already exists. You can remove the file if you want to change it.")
+
+      val schema: Schema[_] = new Schema()
+      schema.setRequired(List[String]("success", "message").asJava)
+      schema.setType("object")
+      schema.setProperties(Map[String, Schema[_]]("success" -> failSchema, "message" -> messageSchema).asJava)
+
+      val response = new ApiResponse
+      response.setDescription("Couldn't save mnemonic")
+      response.setContent(jsonContentType(schema))
+
+      response
+    }
+
+    // Put 200 and 500 in responses
+    val APIResponses: ApiResponses = {
+      val responses = new ApiResponses
+
+      responses.addApiResponse("200", response200)
+      responses.addApiResponse("400", response400)
+
+      responses.setDefault(response400)
+
+      responses
+    }
+
+    // Create a post operation
+    val postOperation: Operation = {
+      val passSchema: Schema[_] = new Schema
+      passSchema.setType("string")
+      passSchema.setDescription("Password to save mnemonic to file using it")
+      passSchema.setExample("My password")
+
+      val schema: Schema[_] = new Schema
+      schema.setProperties(Map[String, Schema[_]]("pass" -> passSchema).asJava)
+
+      val reqBody = new RequestBody
+      reqBody.setContent(jsonContentType(schema))
+
+      val op = new Operation
+      op.setSummary("Save mnemonic to file using the password")
+      op.addTagsItem("proxy")
+      op.setRequestBody(reqBody)
+      op.setResponses(APIResponses)
+
+      op
+    }
+
+    // Add post Operation to paths
+    val path: PathItem = new PathItem
+    path.setPost(postOperation)
+
+    addPath(openAPI, "/proxy/mnemonic/save", path, "/info")
   }
 }
