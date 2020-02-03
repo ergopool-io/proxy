@@ -1,14 +1,16 @@
 package controllers
 
+import java.io.File
+
 import akka.util.ByteString
 import org.scalatestplus.play._
 import play.api.test._
 import play.api.test.Helpers._
-import org.scalatest.BeforeAndAfterAll
+import org.scalatest.{BeforeAndAfterAll, PrivateMethodTester}
 import play.api.libs.Files.SingletonTemporaryFileCreator
 import play.api.mvc.RawBuffer
 import proxy.node.Node
-import proxy.{Config, PoolShareQueue}
+import proxy.{Config, Mnemonic, PoolShareQueue}
 import proxy.status.{ProxyStatus, StatusType}
 import testservers.{NodeServlets, TestNode, TestPoolServer}
 
@@ -17,7 +19,7 @@ import scala.util.{Failure, Try}
 /**
  * Check if proxy server would pass any POST or GET requests with their header and body with any route to that route of the specified node
  */
-class ProxyControllerSpec extends PlaySpec with BeforeAndAfterAll {
+class ProxyControllerSpec extends PlaySpec with BeforeAndAfterAll with PrivateMethodTester {
   val testNodeConnection: String = Config.nodeConnection
   val testPoolServerConnection: String = Config.poolConnection
 
@@ -32,11 +34,13 @@ class ProxyControllerSpec extends PlaySpec with BeforeAndAfterAll {
   val controller: ProxyController = new ProxyController(stubControllerComponents())
 
   override def beforeAll(): Unit = {
+    new File(Config.mnemonicFilename).delete()
     while (!ProxyStatus.isHealthy) Thread.sleep(1000)
   }
 
 
   override def afterAll(): Unit = {
+    new File(Config.mnemonicFilename).delete()
     node.stopServer()
 
     PoolShareQueue.resetQueue()
@@ -84,6 +88,148 @@ class ProxyControllerSpec extends PlaySpec with BeforeAndAfterAll {
       status(response) mustBe OK
       contentType(response) mustBe Some("application/json")
       contentAsString(response) must include ("{\"success\": true}")
+    }
+  }
+
+  /** Check mnemonic */
+  "ProxyController Mnemonic" should {
+    /**
+     * Purpose: Check that response is 400 when there is no mnemonic to save.
+     * Scenario: Sends a request to save method.
+     * Test Conditions:
+     * * status is BAD_REQUEST
+     * * success in response is false
+     */
+    "return 400 when mnemonic is not created on save" in {
+      val bytes: ByteString = ByteString("")
+      val fakeRequest = FakeRequest(POST, "/proxy/mnemonic/save").withHeaders("Content_type" -> "application/json").withBody[RawBuffer](RawBuffer(bytes.size, SingletonTemporaryFileCreator, bytes))
+      val response = controller.saveMnemonic(fakeRequest)
+
+      contentAsString(response).replaceAll("\\s", "") mustBe
+        """
+          |{
+          |   "success": false,
+          |   "message": "mnemonic is not created"
+          |}
+          |""".stripMargin.replaceAll("\\s", "")
+      status(response) mustBe BAD_REQUEST
+    }
+
+    /**
+     * Purpose: Check that response is 200 when calling load method and there is a mnemonic is RAM.
+     * Prerequisites: pass all last tests.
+     * Scenario: Sends a request to load method.
+     * Test Conditions:
+     * * status is OK
+     * * success in response is true
+     */
+    "return 200 when mnemonic is created on load" in {
+      Mnemonic.create()
+      val bytes: ByteString = ByteString("")
+      val fakeRequest = FakeRequest(POST, "/proxy/mnemonic/load").withHeaders("Content_type" -> "application/json").withBody[RawBuffer](RawBuffer(bytes.size, SingletonTemporaryFileCreator, bytes))
+      val response = controller.loadMnemonic(fakeRequest)
+
+      contentAsString(response).replaceAll("\\s", "") mustBe
+        """
+          |{
+          |   "success": true
+          |}
+          |""".stripMargin.replaceAll("\\s", "")
+      status(response) mustBe OK
+    }
+
+    /**
+     * Purpose: Check that response is 200 when calling save method for the first time.
+     * Prerequisites: pass all last tests.
+     * Scenario: Sends a request with right password to save method.
+     * Test Conditions:
+     * * status is OK
+     * * success in response is true
+     */
+    "return 200 when mnemonic saves successfully" in {
+      val bytes: ByteString = ByteString("""{"pass": "right password"}""")
+      val fakeRequest = FakeRequest(POST, "/proxy/mnemonic/save").withHeaders("Content_type" -> "application/json").withBody[RawBuffer](RawBuffer(bytes.size, SingletonTemporaryFileCreator, bytes))
+      val response = controller.saveMnemonic(fakeRequest)
+
+      contentAsString(response).replaceAll("\\s", "") mustBe
+        """
+          |{
+          |   "success": true
+          |}
+          |""".stripMargin.replaceAll("\\s", "")
+      status(response) mustBe OK
+    }
+
+    /**
+     * Purpose: Check that response is 400 on calling save method when mnemonic has been already saved.
+     * Prerequisites: pass all last tests.
+     * Scenario: Sends a request to save method.
+     * Test Conditions:
+     * * status is BAD_REQUEST
+     * * success in response is false
+     */
+    "return 400 when mnemonic has been saved already" in {
+      val bytes: ByteString = ByteString("""{"pass": "right password"}""")
+      val fakeRequest = FakeRequest(POST, "/proxy/mnemonic/save").withHeaders("Content_type" -> "application/json").withBody[RawBuffer](RawBuffer(bytes.size, SingletonTemporaryFileCreator, bytes))
+      val response = controller.saveMnemonic(fakeRequest)
+
+      contentAsString(response).replaceAll("\\s", "") mustBe
+        """
+          |{
+          |   "success": false,
+          |   "message": "Mnemonic file already exists. You can remove the file if you want to change it."
+          |}
+          |""".stripMargin.replaceAll("\\s", "")
+      status(response) mustBe BAD_REQUEST
+    }
+
+    /**
+     * Purpose: Check that response is 400 when wrong password passes to load method.
+     * Prerequisites: pass all last tests.
+     * Scenario: Sends a request with wrong password to load method.
+     * Test Conditions:
+     * * status is BAD_REQUEST
+     * * success in response is false
+     */
+    "return 400 when wrong password passed on load" in {
+      val reload = PrivateMethod[Unit]('reload)
+      Mnemonic invokePrivate reload()
+
+      println(Mnemonic.value)
+      val bytes: ByteString = ByteString("""{"pass": "wrong password"}""")
+      val fakeRequest = FakeRequest(POST, "/proxy/mnemonic/load").withHeaders("Content_type" -> "application/json").withBody[RawBuffer](RawBuffer(bytes.size, SingletonTemporaryFileCreator, bytes))
+      val response = controller.loadMnemonic(fakeRequest)
+
+      contentAsString(response).replaceAll("\\s", "") mustBe
+        """
+          |{
+          |   "success": false,
+          |   "message": "Password is wrong. Send the right one or remove mnemonic file."
+          |}
+          |""".stripMargin.replaceAll("\\s", "")
+      status(response) mustBe BAD_REQUEST
+    }
+
+    /**
+     * Purpose: Check that response is 200 when right password passes to load method.
+     * Prerequisites: pass all last tests.
+     * Scenario: Sends a request with right password to load method.
+     * Test Conditions:
+     * * status is OK
+     * * success in response is true
+     */
+    "return 200 when right password passed on load" in {
+      val bytes: ByteString = ByteString("""{"pass": "right password"}""")
+      val fakeRequest = FakeRequest(POST, "/proxy/mnemonic/load").withHeaders("Content_type" -> "application/json").withBody[RawBuffer](RawBuffer(bytes.size, SingletonTemporaryFileCreator, bytes))
+      val response = controller.loadMnemonic(fakeRequest)
+
+      contentAsString(response).replaceAll("\\s", "") mustBe
+        """
+          |{
+          |   "success": true
+          |}
+          |""".stripMargin.replaceAll("\\s", "")
+      status(response) mustBe OK
     }
   }
 
@@ -585,6 +731,124 @@ class ProxyControllerSpec extends PlaySpec with BeforeAndAfterAll {
         |            application/json:
         |              schema:
         |                $ref: '#/components/schemas/ProxySuccess'
+        |  /proxy/mnemonic/load:
+        |    post:
+        |      tags:
+        |      - proxy
+        |      summary: Load mnemonic
+        |      requestBody:
+        |        content:
+        |          application/json:
+        |            schema:
+        |              properties:
+        |                pass:
+        |                  type: string
+        |                  description: Password of the mnemonic file
+        |                  example: My password
+        |      responses:
+        |        200:
+        |          description: Mnemonic has been loaded successfully
+        |          content:
+        |            application/json:
+        |              schema:
+        |                $ref: '#/components/schemas/ProxySuccess'
+        |        400:
+        |          description: Couldn't load mnemonic
+        |          content:
+        |            application/json:
+        |              schema:
+        |                required:
+        |                - message
+        |                - success
+        |                type: object
+        |                properties:
+        |                  success:
+        |                    type: boolean
+        |                    description: True if operation was successful
+        |                    example: false
+        |                  message:
+        |                    type: string
+        |                    description: reason of failure in operation
+        |                    example: Password is wrong. Send the right one or remove mnemonic
+        |                      file.
+        |        default:
+        |          description: Couldn't load mnemonic
+        |          content:
+        |            application/json:
+        |              schema:
+        |                required:
+        |                - message
+        |                - success
+        |                type: object
+        |                properties:
+        |                  success:
+        |                    type: boolean
+        |                    description: True if operation was successful
+        |                    example: false
+        |                  message:
+        |                    type: string
+        |                    description: reason of failure in operation
+        |                    example: Password is wrong. Send the right one or remove mnemonic
+        |                      file.
+        |  /proxy/mnemonic/save:
+        |    post:
+        |      tags:
+        |      - proxy
+        |      summary: Save mnemonic to file using the password
+        |      requestBody:
+        |        content:
+        |          application/json:
+        |            schema:
+        |              properties:
+        |                pass:
+        |                  type: string
+        |                  description: Password to save mnemonic to file using it
+        |                  example: My password
+        |      responses:
+        |        200:
+        |          description: Mnemonic has been saved into the file successfully
+        |          content:
+        |            application/json:
+        |              schema:
+        |                $ref: '#/components/schemas/ProxySuccess'
+        |        400:
+        |          description: Couldn't save mnemonic
+        |          content:
+        |            application/json:
+        |              schema:
+        |                required:
+        |                - message
+        |                - success
+        |                type: object
+        |                properties:
+        |                  success:
+        |                    type: boolean
+        |                    description: True if operation was successful
+        |                    example: false
+        |                  message:
+        |                    type: string
+        |                    description: reason of failure in operation
+        |                    example: Mnemonic file already exists. You can remove the file
+        |                      if you want to change it.
+        |        default:
+        |          description: Couldn't save mnemonic
+        |          content:
+        |            application/json:
+        |              schema:
+        |                required:
+        |                - message
+        |                - success
+        |                type: object
+        |                properties:
+        |                  success:
+        |                    type: boolean
+        |                    description: True if operation was successful
+        |                    example: false
+        |                  message:
+        |                    type: string
+        |                    description: reason of failure in operation
+        |                    example: Mnemonic file already exists. You can remove the file
+        |                      if you want to change it.
         |  /mining/candidate:
         |    get:
         |      tags:

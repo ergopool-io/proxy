@@ -35,7 +35,7 @@ case class MiningAction[A](action: Action[A]) extends Action[A] with play.api.Lo
                  |   "reason": "Internal Server Error",
                  |   "detail": "${ProxyStatus.reason}"
                  |}
-                 |""".stripMargin.map(_.toByte)
+                 |""".stripMargin
             ),
             Some("application/json")
           )
@@ -54,7 +54,7 @@ case class MiningAction[A](action: Action[A]) extends Action[A] with play.api.Lo
                  |   "reason": "Internal Server Error",
                  |   "detail": "Transaction is being created"
                  |}
-                 |""".stripMargin.map(_.toByte)
+                 |""".stripMargin
             ),
             Some("application/json")
           )

@@ -67,8 +67,8 @@ class PoolShareQueue {
    *
    * @param elems iterable of shares
    */
-  def push(elems: Iterable[Either[Share, (Transaction, Proof)]]): Unit = {
-    this.queue.enqueueAll(elems)
+  def push(elems: List[Either[Share, (Transaction, Proof)]]): Unit = {
+    this.queue.enqueue(elems: _*)
   }
 
   /**
@@ -115,7 +115,7 @@ class PoolShareQueue {
               this.proof = t._2
             }
             if (this.transaction == null || this.proof == null) {
-              queue.dequeueWhile(f => isShare(f))
+              queue.dropWhile(f => isShare(f))
               break
             }
 
@@ -130,7 +130,7 @@ class PoolShareQueue {
               // Pop request if it's accepted or rejected
               if (response.isSuccess) this.popNItem(items.length)
               else if (response.isClientError) {
-                queue.dequeueWhile(f => isShare(f))
+                queue.dropWhile(f => isShare(f))
                 this.transaction = null
                 this.proof = null
               }
@@ -177,7 +177,7 @@ object PoolShareQueue {
    *
    * @param shares [[Iterable]] iterable of shares
    */
-  def push(shares: Iterable[Share]): Unit = {
+  def push(shares: List[Share]): Unit = {
     this.cls.push(shares.map(f => Left(f)))
     runQueue()
   }

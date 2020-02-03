@@ -13,9 +13,10 @@ import io.swagger.v3.parser.OpenAPIV3Parser
 import io.swagger.v3.oas.models.OpenAPI
 import io.swagger.v3.core.util.Yaml
 import proxy.loggers.Logger
-import proxy.node.{MiningCandidate, Node, Share}
+import proxy.node.{MiningCandidate, Node}
 import proxy.status.ProxyStatus
 import proxy.{Config, Pool, PoolShareQueue, ProxyService, ProxySwagger, Response}
+import proxy.Mnemonic
 
 /**
  * Proxy pass controller
@@ -127,7 +128,7 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
    * @return [[Result]] Response from the pool server
    */
   def sendShare: MiningAction[RawBuffer] = MiningAction[RawBuffer] { Action(parse.raw) { implicit request: Request[RawBuffer] =>
-    val shares: Iterable[Share] = ProxyService.getShareRequestBody(request)
+    val shares = ProxyService.getShareRequestBody(request)
 
     PoolShareQueue.push(shares)
 
@@ -208,4 +209,78 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
     }
   }
   // $COVERAGE-ON$
+
+  /**
+   * Load mnemonic if it's not already exist
+   *
+   * @return [[Result]]
+   */
+  def loadMnemonic: Action[RawBuffer] = Action(parse.raw) { implicit request: Request[RawBuffer] =>
+    if (Mnemonic.value == null) {
+      val password = Helper.RawBufferValue(request.body).toJson.hcursor.downField("pass").as[String].getOrElse("")
+
+      if (Mnemonic.read(password)) {
+        Ok(
+          """
+            |{
+            |   "success": true
+            |}
+            |""".stripMargin).as("application/json")
+      }
+      else {
+        BadRequest(
+          """
+            |{
+            |   "success": false,
+            |   "message": "Password is wrong. Send the right one or remove mnemonic file."
+            |}
+            |""".stripMargin).as("application/json")
+      }
+    }
+    else {
+      Ok(
+        """
+          |{
+          |   "success": true
+          |}
+          |""".stripMargin).as("application/json")
+    }
+  }
+
+  /**
+   * Save mnemonic to file it it's not already exists
+   *
+   * @return [[Result]]
+   */
+  def saveMnemonic: Action[RawBuffer] = Action(parse.raw) { implicit request: Request[RawBuffer] =>
+    if (Mnemonic.value == null) {
+      BadRequest(
+        """
+          |{
+          |   "success": false,
+          |   "message": "mnemonic is not created"
+          |}
+          |""".stripMargin).as("application/json")
+    }
+    else {
+      val password = Helper.RawBufferValue(request.body).toJson.hcursor.downField("pass").as[String].getOrElse("")
+      if (!Mnemonic.save(password)) {
+        BadRequest(
+          """
+            |{
+            |   "success": false,
+            |   "message": "Mnemonic file already exists. You can remove the file if you want to change it."
+            |}
+            |""".stripMargin).as("application/json")
+      }
+      else {
+        Ok(
+          """
+            |{
+            |   "success": true
+            |}
+            |""".stripMargin).as("application/json")
+      }
+    }
+  }
 }

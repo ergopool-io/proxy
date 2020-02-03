@@ -86,12 +86,11 @@ object Node {
 
     // Remove the ignored headers
     val contentType: String = respHeaders.getOrElse("Content-Type", "")
-    val filteredHeaders: Map[String, String] = respHeaders.removed("Content-Type").removed("Content-Length")
 
     // Return the response
     Response(
       statusCode = response.code,
-      headers = filteredHeaders,
+      headers = reqHeaders.toMap,
       body = response.body,
       contentType = contentType
     )
