@@ -29,6 +29,9 @@ libraryDependencies += "io.swagger.parser.v3" % "swagger-parser-v3" % "2.0.8"
 
 libraryDependencies += "com.github.alanverbner" %% "bip39" % "0.1"
 
+libraryDependencies += "org.ergoplatform" % "ergo-wallet_2.12" % "3.2.0"
+libraryDependencies += "org.ergoplatform" % "ergo-appkit_2.12" % "3.1.2"
+
 // Assembly build plugin
 mainClass in assembly := Some("play.core.server.ProdServerStart")
 fullClasspath in assembly += Attributed.blank(PlayKeys.playPackageAssets.value)

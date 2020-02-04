@@ -20,13 +20,14 @@ class TestNode(port: Int) extends TestJettyServer {
   handler.addServletWithMapping(classOf[NodeServlets.MiningSolutionServlet], "/mining/solution")
   handler.addServletWithMapping(classOf[NodeServlets.MiningCandidateWithTxsServlet], "/mining/candidateWithTxs")
   handler.addServletWithMapping(classOf[NodeServlets.WalletTransactionGenerateServlet], "/wallet/transaction/generate")
+  handler.addServletWithMapping(classOf[NodeServlets.WalletBoxesUnspentServlet], "/wallet/boxes/unspent")
+  handler.addServletWithMapping(classOf[NodeServlets.WalletDeriveKeyServlet], "/wallet/deriveKey")
+  handler.addServletWithMapping(classOf[NodeServlets.WalletAddressesServlet], "/wallet/addresses")
   handler.addServletWithMapping(classOf[NodeServlets.SwaggerConfigServlet], "/api-docs/swagger.conf")
   handler.addServletWithMapping(classOf[NodeServlets.InfoServlet], "/info")
   handler.addServletWithMapping(classOf[NodeServlets.P2SAddress], "/script/p2sAddress")
   handler.addServletWithMapping(classOf[NodeServlets.UTXOByIdBinaryServlet], "/utxo/byIdBinary/*")
   handler.addServletWithMapping(classOf[NodeServlets.WalletTransactionByIdServlet], "/wallet/transactionById")
-  handler.addServletWithMapping(classOf[NodeServlets.WalletBoxesUnspentServlet], "/wallet/boxes/unspent")
-  handler.addServletWithMapping(classOf[NodeServlets.WalletDeriveKeyServlet], "/wallet/deriveKey")
 }
 
 object NodeServlets {
@@ -35,6 +36,7 @@ object NodeServlets {
   var msg: String = ""
   var failTransaction: Boolean = false
   val protectionAddress: String = "3WwbzW6u8hKWBcL1W7kNVMr25s2UHfSBnYtwSHvrRQt7DdPuoXrt"
+  var walletAddresses: Vector[String] = Vector[String]()
   val transactionResponse: String =
     """
       |{
@@ -476,6 +478,19 @@ object NodeServlets {
           |{
           |  "address": "3WwbzW6u8hKWBcL1W7kNVMr25s2UHfSBnYtwSHvrRQt7DdPuoXrt"
           |}
+          |""".stripMargin)
+    }
+  }
+
+  class WalletAddressesServlet extends HttpServlet {
+    override protected def doGet(req: HttpServletRequest, resp: HttpServletResponse): Unit = {
+      resp.setContentType("application/json")
+      resp.setStatus(HttpServletResponse.SC_OK)
+      resp.getWriter.print(
+        s"""
+          |[
+          |   ${if (walletAddresses.nonEmpty) walletAddresses.map(f => s""""$f"""").mkString(",") else ""}
+          |]
           |""".stripMargin)
     }
   }

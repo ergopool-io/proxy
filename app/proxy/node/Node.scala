@@ -16,9 +16,9 @@ object Node {
   private var remainBoxesTransaction: Transaction = _
   private var txsList: Vector[Transaction] = Vector[Transaction]()
   private var _gapTransaction: Transaction = _
-  private val _protectionScript: String = // TODO: add lock (removed part: " && PK(\"<lock>\")")
+  private val _protectionScript: String =
     """
-      |{"source": "(proveDlog(CONTEXT.preHeader.minerPk).propBytes == PK(\"<miner>\").propBytes)|| PK(\"<withdraw>\")"}
+      |{"source": "(proveDlog(CONTEXT.preHeader.minerPk).propBytes == PK(\"<miner>\").propBytes) && PK(\"<lock>\") || PK(\"<withdraw>\")"}
       |""".stripMargin
 
   def gapTransaction: Transaction = _gapTransaction
@@ -43,6 +43,11 @@ object Node {
       .asBytes
 
     Helper.ArrayByte(response.body).toJson.hcursor.downField("address").as[String].getOrElse("")
+  }
+
+  def walletAddresses: Vector[String] = {
+    val response = Http(s"${Config.nodeConnection}/wallet/addresses").header("api_key", Config.apiKey).asBytes
+    Helper.ArrayByte(response.body).toJson.asArray.get.map(f => f.as[String].getOrElse(""))
   }
 
   /**

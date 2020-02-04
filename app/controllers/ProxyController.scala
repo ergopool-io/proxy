@@ -17,6 +17,7 @@ import proxy.node.{MiningCandidate, Node}
 import proxy.status.ProxyStatus
 import proxy.{Config, Pool, PoolShareQueue, ProxyService, ProxySwagger, Response}
 import proxy.Mnemonic
+import scala.util.{Failure, Success, Try}
 
 /**
  * Proxy pass controller
@@ -220,12 +221,26 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
       val password = Helper.RawBufferValue(request.body).toJson.hcursor.downField("pass").as[String].getOrElse("")
 
       if (Mnemonic.read(password)) {
-        Ok(
-          """
-            |{
-            |   "success": true
-            |}
-            |""".stripMargin).as("application/json")
+        Try {
+          Mnemonic.createAddress()
+        } match {
+          case Failure(exception) =>
+            BadRequest(
+              s"""
+                |{
+                |   "success": false,
+                |   "message": "${exception.getMessage}"
+                |}
+                |""".stripMargin
+            )
+          case Success(_) =>
+            Ok(
+              """
+                |{
+                |   "success": true
+                |}
+                |""".stripMargin).as("application/json")
+        }
       }
       else {
         BadRequest(
@@ -235,6 +250,28 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
             |   "message": "Password is wrong. Send the right one or remove mnemonic file."
             |}
             |""".stripMargin).as("application/json")
+      }
+    }
+    else if (Mnemonic.address == null) {
+      Try {
+        Mnemonic.createAddress()
+      } match {
+        case Failure(exception) =>
+          BadRequest(
+            s"""
+               |{
+               |   "success": false,
+               |   "message": "${exception.getMessage}"
+               |}
+               |""".stripMargin
+          )
+        case Success(_) =>
+          Ok(
+            """
+              |{
+              |   "success": true
+              |}
+              |""".stripMargin).as("application/json")
       }
     }
     else {

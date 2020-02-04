@@ -40,7 +40,7 @@ object Config {
 
   // Addresses to use in protection script
   lazy val minerAddress: String = Node.deriveKey(Helper.readConfig(config, "node.address.miner"))
-  lazy val lockAddress: String = Node.deriveKey(Helper.readConfig(config, "node.address.lock"))
+  def lockAddress: String = Mnemonic.address
   lazy val withdrawAddress: String = Node.deriveKey(Helper.readConfig(config, "node.address.withdraw"))
 
   // The proof for the node
