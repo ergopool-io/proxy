@@ -1,6 +1,7 @@
 package proxy
 
 import javax.inject.Singleton
+import proxy.loggers.Logger
 import proxy.node.Node
 import proxy.status.ProxyStatus.MiningDisabledException
 
@@ -13,8 +14,16 @@ class StartupService {
 
   if (Mnemonic.isFileExists)
     new MiningDisabledException("Load mnemonic to continue")
-  else
+  else {
     Mnemonic.create()
+    try {
+      Mnemonic.createAddress()
+    } catch {
+      case e: Throwable =>
+        Logger.error("Exception happened", e)
+        System.exit(1)
+    }
+  }
 
   Future {
     while (Node.pk == "") Thread.sleep(500)

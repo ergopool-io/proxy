@@ -4,21 +4,18 @@ import java.io.{File, PrintWriter}
 import java.nio.file.{Files, Paths}
 import java.security.SecureRandom
 
-import com.github.alanverbner.bip39.{EnglishWordList, Entropy128, WordList, check, generate}
+import com.github.alanverbner.bip39.{EnglishWordList, Entropy256, WordList, check, generate}
 import helpers.Encryption
 import javax.crypto.BadPaddingException
+import org.ergoplatform.appkit._
+import proxy.node.Node
 
 import scala.io.Source
 
 object Mnemonic {
   private var _value: String = _
   private val filename: String = Config.mnemonicFilename
-
-  /**
-   * The mnemonic value
-   * @return
-   */
-  def value: String = this._value
+  private var _address: String = _
 
   private def createFile(value: String): Unit = {
     val printWriter = new PrintWriter(new File(filename))
@@ -36,13 +33,46 @@ object Mnemonic {
 
   private def reload(): Unit = {
     _value = null
+    _address = null
+  }
+
+  /**
+   * The mnemonic value
+   * @return mnemonic
+   */
+  def value: String = this._value
+
+  /**
+   * Address creating using mnemonic
+   * @return address
+   */
+  def address: String = _address
+
+  /**
+   * Create address using mnemonic value
+   */
+  def createAddress(): Unit = {
+    val secretKey = JavaHelpers.seedToMasterKey(this._value)
+    val pk = secretKey.key.publicImage
+    val nodeWalletAddress = {
+      try {
+        Node.walletAddresses.apply(0)
+      } catch {
+        case _: IndexOutOfBoundsException => throw new Throwable("Empty wallet addresses")
+      }
+    }
+    val networkPrefix = nodeWalletAddress.apply(0) match {
+      case '3' => 16.toByte // Test net
+      case '9' => 0.toByte // Main net
+    }
+    this._address = JavaHelpers.createP2PKAddress(pk, networkPrefix).toString()
   }
 
   /**
    * Create mnemonic
    */
   def create(): Unit = {
-    _value = generate(Entropy128, WordList.load(EnglishWordList).get, new SecureRandom())
+    _value = generate(Entropy256, WordList.load(EnglishWordList).get, new SecureRandom())
   }
 
   /**

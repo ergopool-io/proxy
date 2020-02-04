@@ -125,6 +125,7 @@ class ProxyControllerSpec extends PlaySpec with BeforeAndAfterAll with PrivateMe
      */
     "return 200 when mnemonic is created on load" in {
       Mnemonic.create()
+      NodeServlets.walletAddresses = Vector[String]("3address1")
       val bytes: ByteString = ByteString("")
       val fakeRequest = FakeRequest(POST, "/proxy/mnemonic/load").withHeaders("Content_type" -> "application/json").withBody[RawBuffer](RawBuffer(bytes.size, SingletonTemporaryFileCreator, bytes))
       val response = controller.loadMnemonic(fakeRequest)
@@ -195,7 +196,6 @@ class ProxyControllerSpec extends PlaySpec with BeforeAndAfterAll with PrivateMe
       val reload = PrivateMethod[Unit]('reload)
       Mnemonic invokePrivate reload()
 
-      println(Mnemonic.value)
       val bytes: ByteString = ByteString("""{"pass": "wrong password"}""")
       val fakeRequest = FakeRequest(POST, "/proxy/mnemonic/load").withHeaders("Content_type" -> "application/json").withBody[RawBuffer](RawBuffer(bytes.size, SingletonTemporaryFileCreator, bytes))
       val response = controller.loadMnemonic(fakeRequest)
@@ -211,6 +211,30 @@ class ProxyControllerSpec extends PlaySpec with BeforeAndAfterAll with PrivateMe
     }
 
     /**
+     * Purpose: Check that response is 400 when calling load method and node wallet addresses is empty.
+     * Prerequisites: pass all last tests.
+     * Scenario: Sends a request to load method.
+     * Test Conditions:
+     * * status is BAD_REQUEST
+     * * success in response is false
+     */
+    "return 400 when wallet addresses is empty on load" in {
+      NodeServlets.walletAddresses = Vector[String]()
+      val bytes: ByteString = ByteString("""{"pass": "right password"}""")
+      val fakeRequest = FakeRequest(POST, "/proxy/mnemonic/load").withHeaders("Content_type" -> "application/json").withBody[RawBuffer](RawBuffer(bytes.size, SingletonTemporaryFileCreator, bytes))
+      val response = controller.loadMnemonic(fakeRequest)
+
+      contentAsString(response).replaceAll("\\s", "") mustBe
+        """
+          |{
+          |   "success": false,
+          |   "message": "Empty wallet addresses"
+          |}
+          |""".stripMargin.replaceAll("\\s", "")
+      status(response) mustBe BAD_REQUEST
+    }
+
+    /**
      * Purpose: Check that response is 200 when right password passes to load method.
      * Prerequisites: pass all last tests.
      * Scenario: Sends a request with right password to load method.
@@ -219,6 +243,9 @@ class ProxyControllerSpec extends PlaySpec with BeforeAndAfterAll with PrivateMe
      * * success in response is true
      */
     "return 200 when right password passed on load" in {
+      val reload = PrivateMethod[Unit]('reload)
+      Mnemonic invokePrivate reload()
+      NodeServlets.walletAddresses = Vector[String]("3address1")
       val bytes: ByteString = ByteString("""{"pass": "right password"}""")
       val fakeRequest = FakeRequest(POST, "/proxy/mnemonic/load").withHeaders("Content_type" -> "application/json").withBody[RawBuffer](RawBuffer(bytes.size, SingletonTemporaryFileCreator, bytes))
       val response = controller.loadMnemonic(fakeRequest)
