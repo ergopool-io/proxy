@@ -2,7 +2,22 @@ maintainer in Linux := "AmirHossein Bahrami <a.bahrami9675@gmail.com>"
 name := """ergo-proxy"""
 organization := "ergo"
 
-version := "0.3"
+enablePlugins(GitVersioning)
+
+version in ThisBuild := {
+  if (git.gitCurrentTags.value.nonEmpty) {
+    git.gitDescribedVersion.value.get
+  } else {
+    if (git.gitHeadCommit.value.contains(git.gitCurrentBranch.value)) {
+        git.gitHeadCommit.value.get.take(8) + "-SNAPSHOT"
+    } else {
+      git.gitCurrentBranch.value + "-" + git.gitHeadCommit.value.get.take(8) + "-SNAPSHOT"
+    }
+  }
+}
+
+git.gitUncommittedChanges in ThisBuild := true
+
 
 lazy val root = (project in file(".")).enablePlugins(PlayScala)
 
