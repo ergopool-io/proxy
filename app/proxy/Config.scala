@@ -55,11 +55,9 @@ object Config {
   val mnemonicFilename: String = Helper.readConfig(config, "mnemonic.filename", "mnemonic")
 
   // The pool server routes
-  val poolServerSolutionRoute: String = Helper.readConfig(config,"pool.route.solution")
-  val poolServerProofRoute: String = Helper.readConfig(config,"pool.route.proof")
-  val poolServerConfigRoute: String = Helper.readConfig(config,"pool.route.config")
-  val poolServerTransactionRoute: String = Helper.readConfig(config,"pool.route.new_transaction")
-  var poolServerSpecificConfigRoute: String = Helper.readConfig(config,"pool.route.specific_config")
+  val poolServerValidationRoute: String = Helper.readConfig(config, "pool.route.share")
+  val poolServerConfigRoute: String = Helper.readConfig(config, "pool.route.config")
+  var poolServerSpecificConfigRoute: String = Helper.readConfig(config, "pool.route.specific_config")
 
   def loadPoolConfig(): Unit = {
     // Get pool configs

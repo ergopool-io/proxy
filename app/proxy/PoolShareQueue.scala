@@ -78,7 +78,7 @@ class PoolShareQueue {
    * @return response from the pool
    */
   private def send(onGoingQueue: mutable.Queue[Json]): HttpResponse[Array[Byte]] = {
-    Http(s"${Config.poolConnection}${Config.poolServerSolutionRoute}")
+    Http(s"${Config.poolConnection}${Config.poolServerValidationRoute}")
       .header("Content-Type", "application/json")
       .postData(
         s"""
