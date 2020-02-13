@@ -45,7 +45,7 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
     Result(
       header = ResponseHeader(response.statusCode, response.headers),
       body = HttpEntity.Strict(ByteString(response.body), Some(contentType))
-    )
+    ).withHeaders(("Access-Control-Allow-Origin", "*"))
   }
 
   /**
@@ -56,7 +56,7 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
   def reloadConfig: Action[RawBuffer] = Action(parse.raw) { implicit request: Request[RawBuffer] =>
     Config.loadPoolConfig()
 
-    Ok("""{"success": true}""").as("application/json")
+    Ok("""{"success": true}""").as("application/json").withHeaders(("Access-Control-Allow-Origin", "*"))
   }
 
   /**
@@ -68,7 +68,7 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
     val success: Boolean = ProxyStatus.reset()
 
     if (success)
-      Ok("""{"success": true}""").as("application/json")
+      Ok("""{"success": true}""").as("application/json").withHeaders(("Access-Control-Allow-Origin", "*"))
     else
       InternalServerError(
         s"""
@@ -76,7 +76,7 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
           |   "success": false,
           |   "message": "${ProxyStatus.reason}"
           |}
-          |""".stripMargin).as("application/json")
+          |""".stripMargin).as("application/json").withHeaders(("Access-Control-Allow-Origin", "*"))
   }
 
   /**
@@ -96,7 +96,7 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
     Result(
       header = ResponseHeader(response.statusCode, response.headers),
       body = HttpEntity.Strict(ByteString(response.body), Some(response.contentType))
-    )
+    ).withHeaders(("Access-Control-Allow-Origin", "*"))
   }}
 
   /**
@@ -116,9 +116,9 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
       Result(
         header = ResponseHeader(nodeResponse.statusCode, nodeResponse.headers),
         body = HttpEntity.Strict(ByteString(nodeResponse.body), Some(nodeResponse.contentType))
-      )
+      ).withHeaders(("Access-Control-Allow-Origin", "*"))
     } else {
-      InternalServerError
+      InternalServerError.withHeaders(("Access-Control-Allow-Origin", "*"))
     }
   }}
 
@@ -133,7 +133,7 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
 
     PoolShareQueue.push(shares)
 
-    Ok(Json.obj().toString()).as("application/json")
+    Ok(Json.obj().toString()).as("application/json").withHeaders(("Access-Control-Allow-Origin", "*"))
   }}
 
   /**
@@ -151,7 +151,7 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
     Result(
       header = ResponseHeader(200),
       body = HttpEntity.Strict(ByteString(yaml), Some("application/json"))
-    )
+    ).withHeaders(("Access-Control-Allow-Origin", "*"))
   }
 
   /**
@@ -172,7 +172,7 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
     Result(
       header = ResponseHeader(200),
       body = HttpEntity.Strict(ByteString(newResponseBody.toString()), Some("application/json"))
-    )
+    ).withHeaders(("Access-Control-Allow-Origin", "*"))
   }
 
   // $COVERAGE-OFF$
@@ -198,7 +198,7 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
           |{
           |   "success": true
           |}
-          |""".stripMargin).as("application/json")
+          |""".stripMargin).as("application/json").withHeaders(("Access-Control-Allow-Origin", "*"))
     else {
       InternalServerError(
         s"""
@@ -206,7 +206,7 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
           |   "success": false,
           |   "messages": ${Logger.messages.getAll.asJson}
           |}
-          |""".stripMargin).as("application/json")
+          |""".stripMargin).as("application/json").withHeaders(("Access-Control-Allow-Origin", "*"))
     }
   }
   // $COVERAGE-ON$
@@ -232,14 +232,15 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
                 |   "message": "${exception.getMessage}"
                 |}
                 |""".stripMargin
-            )
+            ).withHeaders(("Access-Control-Allow-Origin", "*"))
           case Success(_) =>
             Ok(
               """
                 |{
                 |   "success": true
                 |}
-                |""".stripMargin).as("application/json")
+                |""".stripMargin
+            ).as("application/json").withHeaders(("Access-Control-Allow-Origin", "*"))
         }
       }
       else {
@@ -249,7 +250,8 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
             |   "success": false,
             |   "message": "Password is wrong. Send the right one or remove mnemonic file."
             |}
-            |""".stripMargin).as("application/json")
+            |""".stripMargin
+        ).as("application/json").withHeaders(("Access-Control-Allow-Origin", "*"))
       }
     }
     else if (Mnemonic.address == null) {
@@ -264,14 +266,15 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
                |   "message": "${exception.getMessage}"
                |}
                |""".stripMargin
-          )
+          ).withHeaders(("Access-Control-Allow-Origin", "*"))
         case Success(_) =>
           Ok(
             """
               |{
               |   "success": true
               |}
-              |""".stripMargin).as("application/json")
+              |""".stripMargin
+          ).as("application/json").withHeaders(("Access-Control-Allow-Origin", "*"))
       }
     }
     else {
@@ -280,7 +283,8 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
           |{
           |   "success": true
           |}
-          |""".stripMargin).as("application/json")
+          |""".stripMargin
+      ).as("application/json").withHeaders(("Access-Control-Allow-Origin", "*"))
     }
   }
 
@@ -297,7 +301,8 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
           |   "success": false,
           |   "message": "mnemonic is not created"
           |}
-          |""".stripMargin).as("application/json")
+          |""".stripMargin
+      ).as("application/json").withHeaders(("Access-Control-Allow-Origin", "*"))
     }
     else {
       val password = Helper.RawBufferValue(request.body).toJson.hcursor.downField("pass").as[String].getOrElse("")
@@ -308,7 +313,8 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
             |   "success": false,
             |   "message": "Mnemonic file already exists. You can remove the file if you want to change it."
             |}
-            |""".stripMargin).as("application/json")
+            |""".stripMargin
+        ).as("application/json").withHeaders(("Access-Control-Allow-Origin", "*"))
       }
       else {
         Ok(
@@ -316,7 +322,8 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
             |{
             |   "success": true
             |}
-            |""".stripMargin).as("application/json")
+            |""".stripMargin
+        ).as("application/json").withHeaders(("Access-Control-Allow-Origin", "*"))
       }
     }
   }
