@@ -50,5 +50,8 @@ class ProxyRouter @Inject()(controller: ProxyController) extends SimpleRouter {
 
     case POST(p"/$path*") =>
       controller.proxyPass()
+
+    case OPTIONS(p"/$path*") =>
+      controller.proxyPass()
   }
 }
