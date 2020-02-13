@@ -3,7 +3,7 @@ package proxy
 import helpers.Helper
 import io.circe.HCursor
 import play.api.mvc.{RawBuffer, Request}
-import proxy.node.Share
+import proxy.node.{Node, Share}
 import proxy.status.ProxyStatus
 
 object ProxyService {
@@ -35,11 +35,15 @@ object ProxyService {
        |{
        |   "proxy": {
        |     "pool": {
-       |       "connection": "${Config.nodeConnection}",
+       |       "connection": "${Config.poolConnection}",
        |       "config": {
        |         "wallet": "${Config.walletAddress}",
        |         "difficulty_factor": ${Config.poolDifficultyFactor},
+       |         "max_chunk_size": ${Config.maxChunkSize},
        |         "transaction_request_value": ${Config.transactionRequestsValue}
+       |       },
+       |       "node": {
+       |          "pk": "${Node.pk}"
        |       }
        |     },
        |     "status": $ProxyStatus
