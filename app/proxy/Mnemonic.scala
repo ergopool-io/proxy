@@ -4,55 +4,44 @@ import java.io.{File, PrintWriter}
 import java.nio.file.{Files, Paths}
 import java.security.SecureRandom
 
-import com.github.alanverbner.bip39.{EnglishWordList, Entropy256, WordList, check, generate}
+import com.github.alanverbner.bip39._
 import helpers.Encryption
 import javax.crypto.BadPaddingException
+import org.ergoplatform.P2PKAddress
 import org.ergoplatform.appkit._
+import proxy.loggers.Logger
 import proxy.node.Node
 
 import scala.io.Source
 
 object Mnemonic {
-  private var _value: String = _
   private val filename: String = Config.mnemonicFilename
-  private var _address: String = _
-
-  private def createFile(value: String): Unit = {
-    val printWriter = new PrintWriter(new File(filename))
-    printWriter.write(value)
-    printWriter.close()
-  }
-
-  private def readFile(): String = {
-    val f = Source.fromFile(filename)
-    val line = f.getLines().mkString
-    f.close()
-
-    line
-  }
-
-  private def reload(): Unit = {
-    _value = null
-    _address = null
-  }
+  private[this] var _value: String = _
+  private var _address: P2PKAddress = _
 
   /**
    * The mnemonic value
+   *
    * @return mnemonic
    */
   def value: String = this._value
 
+  private def setValue(value: String): Unit = {
+    _value = value
+  }
+
   /**
    * Address creating using mnemonic
+   *
    * @return address
    */
-  def address: String = _address
+  def address: P2PKAddress = _address
 
   /**
    * Create address using mnemonic value
    */
   def createAddress(): Unit = {
-    val secretKey = JavaHelpers.seedToMasterKey(this._value)
+    val secretKey = JavaHelpers.seedToMasterKey(SecretString.create(this._value))
     val pk = secretKey.key.publicImage
     val nodeWalletAddress = {
       try {
@@ -61,11 +50,11 @@ object Mnemonic {
         case _: IndexOutOfBoundsException => throw new Throwable("Empty wallet addresses")
       }
     }
-    val networkPrefix = nodeWalletAddress.apply(0) match {
-      case '3' => 16.toByte // Test net
-      case '9' => 0.toByte // Main net
+    nodeWalletAddress.apply(0) match {
+      case '3' => Config.networkType = NetworkType.TESTNET
+      case '9' => Config.networkType = NetworkType.MAINNET
     }
-    this._address = JavaHelpers.createP2PKAddress(pk, networkPrefix).toString()
+    this._address = JavaHelpers.createP2PKAddress(pk, Config.networkType.networkPrefix)
   }
 
   /**
@@ -88,6 +77,7 @@ object Mnemonic {
     try {
       val sequence = new Encryption(key).decrypt(line)
       if (check(sequence, WordList.load(EnglishWordList).get)) {
+        Logger.error(sequence)
         _value = sequence
         true
       }
@@ -96,6 +86,14 @@ object Mnemonic {
     catch {
       case _: BadPaddingException => false
     }
+  }
+
+  private def readFile(): String = {
+    val f = Source.fromFile(filename)
+    val line = f.getLines().mkString
+    f.close()
+
+    line
   }
 
   /**
@@ -107,6 +105,7 @@ object Mnemonic {
 
   /**
    * Save mnemonic to the file with specified encryption key
+   *
    * @param key [[String]] encryption key of content
    * @return
    */
@@ -117,5 +116,16 @@ object Mnemonic {
       createFile(new Encryption(key).encrypt(_value))
       true
     }
+  }
+
+  private def createFile(value: String): Unit = {
+    val printWriter = new PrintWriter(new File(filename).getCanonicalFile)
+    printWriter.write(value)
+    printWriter.close()
+  }
+
+  private def reload(): Unit = {
+    _value = null
+    _address = null
   }
 }

@@ -1,7 +1,8 @@
 package proxy
 
+import helpers.Helper
 import io.circe.Json
-import proxy.loggers.Logger
+import proxy.loggers.{DebugLogger, Logger}
 import scalaj.http.{Http, HttpResponse}
 import io.circe.syntax._
 import proxy.node.{Node, Proof, Share, Transaction}
@@ -16,7 +17,7 @@ import scala.util.control.Breaks._
  * It tries to send each request in the queue until it's empty
  */
 class PoolShareQueue {
-  private val queue: mutable.Queue[Either[Share, (Transaction, Proof)]] = mutable.Queue.empty
+  private var queue: mutable.Queue[Either[Share, (Transaction, Proof)]] = mutable.Queue.empty
   private var _lock: Boolean = false
   private var isRunning: Boolean = false
   private var transaction: Transaction = _
@@ -58,7 +59,7 @@ class PoolShareQueue {
    *
    * @param elem element to add to queue
    */
-  def push(elem: Either[Share, (Transaction, Proof)]): Unit = {
+  private def push(elem: Either[Share, (Transaction, Proof)]): Unit = {
     this.queue.enqueue(elem)
   }
 
@@ -67,7 +68,7 @@ class PoolShareQueue {
    *
    * @param elems iterable of shares
    */
-  def push(elems: List[Either[Share, (Transaction, Proof)]]): Unit = {
+  private def push(elems: List[Either[Share, (Transaction, Proof)]]): Unit = {
     this.queue.enqueue(elems: _*)
   }
 
@@ -78,17 +79,18 @@ class PoolShareQueue {
    * @return response from the pool
    */
   private def send(onGoingQueue: mutable.Queue[Json]): HttpResponse[Array[Byte]] = {
+    DebugLogger.debug(s"Send Shares to the pool: \n${onGoingQueue.asJson}")
     Http(s"${Config.poolConnection}${Config.poolServerValidationRoute}")
       .header("Content-Type", "application/json")
       .postData(
         s"""
           |{
           |    "addresses": {
-          |        "miner": ${Config.minerAddress},
-          |        "lock": ${Config.lockAddress},
-          |        "withdraw": ${Config.withdrawAddress}
+          |        "miner": "${Config.minerAddress}",
+          |        "lock": "${Config.lockAddress}",
+          |        "withdraw": "${Config.withdrawAddress}"
           |    },
-          |    "pk": ${Node.pk},
+          |    "pk": "${Node.pk}",
           |    "transaction": ${this.transaction.details},
           |    "proof": ${this.proof.body},
           |    "shares": ${onGoingQueue.asJson}
@@ -110,11 +112,23 @@ class PoolShareQueue {
         breakable {
           try {
             if (isTxsP(queue.head)) {
-              val t = queue.dequeue().getOrElse(0).asInstanceOf[(Transaction, Proof)]
+              DebugLogger.debug(
+                s"""
+                  |Pool Queue found a TxsP:
+                  |${queue.head}
+                  |""".stripMargin)
+              val t = queue.dequeue().asInstanceOf[Right[Share, (Transaction, Proof)]].value
               if (t._1 != null) this.transaction = t._1
               this.proof = t._2
             }
             if (this.transaction == null || this.proof == null) {
+              DebugLogger.error(queue.toString())
+              DebugLogger.error(
+                s"""
+                  |Empty transaction/proof:
+                  |Transaction: ${this.transaction}
+                  |Proof: ${this.proof}
+                  |""".stripMargin)
               queue.dropWhile(f => isShare(f))
               break
             }
@@ -122,22 +136,28 @@ class PoolShareQueue {
             val items = queue
               .take(Config.maxChunkSize)
               .takeWhile(p => isShare(p))
-              .map(f => f.left.getOrElse(null).body)
+              .map(f => f.left.getOrElse(null).asInstanceOf[Share].body)
 
-            if (items.nonEmpty) { // In case of queue was cleared between while condition and take action
+            if (items.nonEmpty) { // In case of queue has been cleared between "while condition" and "take action"
               val response: HttpResponse[Array[Byte]] = send(items)
 
               // Pop request if it's accepted or rejected
-              if (response.isSuccess) this.popNItem(items.length)
+              if (true) this.popNItem(items.length) // TODO: change condition
               else if (response.isClientError) {
-                queue.dropWhile(f => isShare(f))
+                DebugLogger.error(s"Client error from the pool: \n${Helper.ArrayByte(response.body).toString}")
+                queue = queue.dropWhile(f => isShare(f))
                 this.transaction = null
                 this.proof = null
               }
-              else Thread.sleep(5000)
+              else {
+                DebugLogger.error(s"Internal error from the pool: \n${Helper.ArrayByte(response.body).toString}")
+                Thread.sleep(5000)
+              }
             }
           }
           catch {
+            case _: scala.util.control.ControlThrowable =>
+              break
             case e: Throwable =>
               Logger.error("Error occurred when tried to send request to pool", e)
           }
@@ -168,6 +188,11 @@ object PoolShareQueue {
    * @param share [[Share]] body of request
    */
   def push(share: Share): Unit = {
+    DebugLogger.debug(
+      s"""
+        |New Share pushed:
+        |$share
+        |""".stripMargin)
     this.cls.push(Left(share))
     runQueue()
   }
@@ -178,6 +203,11 @@ object PoolShareQueue {
    * @param shares [[Iterable]] iterable of shares
    */
   def push(shares: List[Share]): Unit = {
+    DebugLogger.debug(
+      s"""
+        |New Shares pushed:
+        |$shares
+        |""".stripMargin)
     this.cls.push(shares.map(f => Left(f)))
     runQueue()
   }
@@ -189,6 +219,12 @@ object PoolShareQueue {
    * @param proof [[Proof]] proof to add
    */
   def push(txs: Transaction, proof: Proof): Unit = {
+    DebugLogger.debug(
+      s"""
+        |New Transaction & Proof pushed:
+        |$txs
+        |$proof
+        |""".stripMargin)
     this.cls.push(Right((txs, proof)))
   }
 

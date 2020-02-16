@@ -51,4 +51,12 @@ object ProxyService {
        |}
        |""".stripMargin
   }
+
+  def response(success: Boolean, message: String = null): String = {
+    s"""
+      |{
+      |   "success": $success${if (message != null) s""",\n\t"message": "$message"""" else ""}
+      |}
+      |""".stripMargin
+  }
 }

@@ -15,51 +15,38 @@ import scala.concurrent.{ExecutionContext, Future}
  * check if pool is unlock
  */
 case class MiningAction[A](action: Action[A]) extends Action[A] with play.api.Logging {
+  private def errorResponse(message: String): Future[Result] = Future.successful(
+    Result(
+      header = ResponseHeader(500),
+      body = HttpEntity.Strict(
+        ByteString(
+          s"""
+             |{
+             |   "error": 500,
+             |   "reason": "Internal Server Error",
+             |   "detail": "$message"
+             |}
+             |""".stripMargin
+        ),
+        Some("application/json")
+      )
+    )
+  )
+
   def apply(request: Request[A]): Future[Result] = {
     if (!ProxyStatus.isWorking) {
       if (ProxyStatus.category == "Mining - TxsGen") {
         if (Node.gapTransaction.isMined) {
-          Node.fetchUnspentBoxes()
-          ProxyStatus.setStatus(StatusType.green)
+          Node.removeUnprotectedSpentBoxes()
+          Node.addBoxes(Node.gapTransaction)
+          ProxyStatus.setStatus(StatusType.green, "Mining - TxsGen")
           return action(request)
         }
       }
-      Future.successful(
-        Result(
-          header = ResponseHeader(500),
-          body = HttpEntity.Strict(
-            ByteString(
-              s"""
-                 |{
-                 |   "error": 500,
-                 |   "reason": "Internal Server Error",
-                 |   "detail": "${ProxyStatus.reason}"
-                 |}
-                 |""".stripMargin
-            ),
-            Some("application/json")
-          )
-        )
-      )
+      this.errorResponse(ProxyStatus.reason)
     }
     else if (PoolShareQueue.isLock) {
-      Future.successful(
-        Result(
-          header = ResponseHeader(500),
-          body = HttpEntity.Strict(
-            ByteString(
-              s"""
-                 |{
-                 |   "error": 500,
-                 |   "reason": "Internal Server Error",
-                 |   "detail": "Transaction is being created"
-                 |}
-                 |""".stripMargin
-            ),
-            Some("application/json")
-          )
-        )
-      )
+      this.errorResponse("Transaction is being created")
     }
     else {
       action(request)
@@ -67,5 +54,6 @@ case class MiningAction[A](action: Action[A]) extends Action[A] with play.api.Lo
   }
 
   override def parser: BodyParser[A] = action.parser
+
   override def executionContext: ExecutionContext = action.executionContext
 }

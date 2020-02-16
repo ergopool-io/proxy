@@ -21,9 +21,7 @@ class TestPoolServer(port: Int) extends TestJettyServer {
   handler.addServletWithMapping(classOf[PoolServerServlets.ConfigServlet],
     Config.poolServerSpecificConfigRoute.replaceFirst("<pk>",
       "0278011ec0cf5feb92d61adb51dcb75876627ace6fd9446ab4cabc5313ab7b39a7"))
-  handler.addServletWithMapping(classOf[PoolServerServlets.TransactionServlet], Config.poolServerTransactionRoute)
-  handler.addServletWithMapping(classOf[PoolServerServlets.InternalServerErrorServlet], Config.poolServerSolutionRoute)
-  handler.addServletWithMapping(classOf[PoolServerServlets.HeaderServlet], Config.poolServerProofRoute)
+  handler.addServletWithMapping(classOf[PoolServerServlets.InternalServerErrorServlet], Config.poolServerValidationRoute)
 }
 
 object PoolServerServlets {
@@ -95,7 +93,7 @@ object PoolServerServlets {
       response.getWriter.print(
         s"""
            |{
-           |    "reward": 67500000000,
+           |    "reward": 6750000000,
            |    "wallet_address": "3WvrVTCPJ1keSdtqNL5ayzQ62MmTNz4Rxq7vsjcXgLJBwZkvHrGa",
            |    "pool_base_factor": 10,
            |    "max_chunk_size": 10

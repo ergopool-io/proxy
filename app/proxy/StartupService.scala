@@ -1,20 +1,21 @@
 package proxy
 
 import javax.inject.Singleton
-import proxy.loggers.Logger
+import proxy.loggers.{DebugLogger, Logger}
 import proxy.node.Node
-import proxy.status.ProxyStatus.MiningDisabledException
+import proxy.status.{ProxyStatus, StatusType}
 
-import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Future
 
 @Singleton
 class StartupService {
+  ProxyStatus.setStatus(StatusType.green, "Proxy")
   Config.loadPoolConfig()
 
-  if (Mnemonic.isFileExists)
-    new MiningDisabledException("Load mnemonic to continue")
-  else {
+  if (Mnemonic.isFileExists) {
+    ProxyStatus.disableMining("Load mnemonic to continue", "Mnemonic")
+  } else {
     Mnemonic.create()
     try {
       Mnemonic.createAddress()
@@ -26,8 +27,15 @@ class StartupService {
   }
 
   Future {
-    while (Node.pk == "") Thread.sleep(500)
-    Node.createProtectionScript()
-    Node.fetchUnspentBoxes()
+    try {
+      while (Node.pk == "" || Mnemonic.address == null) Thread.sleep(500)
+      Node.createProtectionScript()
+      Node.fetchUnspentBoxes()
+      DebugLogger.debug(Config.lockAddress)
+      if (ProxyStatus.category != "Config") ProxyStatus.reset()
+    } catch {
+      case e: Throwable =>
+        Logger.error(e.toString, e)
+    }
   }
 }

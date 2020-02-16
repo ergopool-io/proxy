@@ -1,12 +1,12 @@
 package proxy.node
 
-import org.scalatest.BeforeAndAfterAll
+import org.scalatest.{BeforeAndAfterAll, PrivateMethodTester}
 import org.scalatestplus.play.PlaySpec
-import proxy.Config
-import testservers.{NodeServlets, TestNode}
+import proxy.{Config, Mnemonic}
+import testservers.{NodeServlets, TestNode, TestResponses}
 
 
-class NodeSpec extends PlaySpec with BeforeAndAfterAll {
+class NodeSpec extends PlaySpec with BeforeAndAfterAll with PrivateMethodTester {
   val testNodeConnection: String = Config.nodeConnection
 
   val node: TestNode = new TestNode(testNodeConnection.split(":").last.toInt)
@@ -42,8 +42,20 @@ class NodeSpec extends PlaySpec with BeforeAndAfterAll {
      * * there is one box in the vector
      */
     "fetch unspent boxes with protection address" in {
+      NodeServlets.protectionAddress = "5Hg4a36kRJxyZpQBh4g5ConDLfFZFNAu2UvhuMydaLcqQwg5CySs1ptD3aFMHHHie5eZ6cNwW8" +
+        "JWTTduodU5U4eAVvRkV3QJVExpUZaxzv5grXsx8At4yAcyvtNb1vYQtf5Zo68qAGKp4sTDYqEV1M2kiH7kdBCzHzLYnxCMEYJJ4qA45MSqKQV"
+      val mnemonicValueSetter = PrivateMethod[Unit]('setValue)
+      Mnemonic invokePrivate mnemonicValueSetter("vapor ice mind spray humble chicken adapt all brief faith pilot " +
+        "wool million bubble spy robust trend elevator quarter sun hair all share acquire")
+      Node.pk = "03dafb7b05c4acadd8bce096ecacc3b7d24c86715b8d533a9182f0fc135558c921"
+      NodeServlets.walletAddresses = Vector[String]("3address1")
+      Mnemonic.createAddress()
+      NodeServlets.unspentBoxes = TestResponses.unspentBoxes
+      Config.transactionRequestsValue = 67500000000L
+      Node.createProtectionScript()
+
       Node.fetchUnspentBoxes()
-      Node.unspentBoxes.size mustBe 1
+      Node.protectedUnspentBoxes.size mustBe 1
     }
   }
 }

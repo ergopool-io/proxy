@@ -51,6 +51,10 @@
     <appender-ref ref="PROXYASYNCFILE" />
   </logger>
 
+  <logger name="proxyDebug" level="DEBUG">
+    <appender-ref ref="ASYNCFILE" />
+  </logger>
+
   <root level="WARN">
     <!-- <appender-ref ref="ASYNCFILE" /> -->
     <appender-ref ref="ASYNCSTDOUT" />

@@ -14,9 +14,10 @@ import io.swagger.v3.oas.models.OpenAPI
 import io.swagger.v3.core.util.Yaml
 import proxy.loggers.Logger
 import proxy.node.{MiningCandidate, Node}
-import proxy.status.ProxyStatus
+import proxy.status.{ProxyStatus, StatusType}
 import proxy.{Config, Pool, PoolShareQueue, ProxyService, ProxySwagger, Response}
 import proxy.Mnemonic
+
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -56,7 +57,7 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
   def reloadConfig: Action[RawBuffer] = Action(parse.raw) { implicit request: Request[RawBuffer] =>
     Config.loadPoolConfig()
 
-    Ok("""{"success": true}""").as("application/json").withHeaders(("Access-Control-Allow-Origin", "*"))
+    Ok(ProxyService.response(success = true)).as("application/json").withHeaders(("Access-Control-Allow-Origin", "*"))
   }
 
   /**
@@ -65,18 +66,13 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
    * @return
    */
   def resetStatus: Action[RawBuffer] = Action(parse.raw) { implicit request: Request[RawBuffer] =>
-    val success: Boolean = ProxyStatus.reset()
-
-    if (success)
-      Ok("""{"success": true}""").as("application/json").withHeaders(("Access-Control-Allow-Origin", "*"))
-    else
-      InternalServerError(
-        s"""
-          |{
-          |   "success": false,
-          |   "message": "${ProxyStatus.reason}"
-          |}
-          |""".stripMargin).as("application/json").withHeaders(("Access-Control-Allow-Origin", "*"))
+    ProxyStatus.category match {
+      case "Config" =>
+        InternalServerError(ProxyService.response(success = false, ProxyStatus.reason)).as("application/json").withHeaders(("Access-Control-Allow-Origin", "*"))
+      case _ =>
+        ProxyStatus.reset()
+        Ok(ProxyService.response(success = true)).as("application/json").withHeaders(("Access-Control-Allow-Origin", "*"))
+    }
   }
 
   /**
@@ -189,24 +185,14 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
     }
     catch {
       case error: Throwable =>
-        Logger.error(s"Error in mining candidate - ${error.getMessage}", error)
+        Logger.error(s"Error in mining candidate - ${error.toString}", error)
     }
     Logger.messagingEnabled = false
     if (Logger.messages.isEmpty)
-      Ok(
-        """
-          |{
-          |   "success": true
-          |}
-          |""".stripMargin).as("application/json").withHeaders(("Access-Control-Allow-Origin", "*"))
+      Ok(ProxyService.response(success = true)).as("application/json").withHeaders(("Access-Control-Allow-Origin", "*"))
     else {
-      InternalServerError(
-        s"""
-          |{
-          |   "success": false,
-          |   "messages": ${Logger.messages.getAll.asJson}
-          |}
-          |""".stripMargin).as("application/json").withHeaders(("Access-Control-Allow-Origin", "*"))
+      InternalServerError(ProxyService.response(success = false, Logger.messages.getAll.asJson.toString()))
+        .as("application/json").withHeaders(("Access-Control-Allow-Origin", "*"))
     }
   }
   // $COVERAGE-ON$
@@ -225,33 +211,15 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
           Mnemonic.createAddress()
         } match {
           case Failure(exception) =>
-            BadRequest(
-              s"""
-                |{
-                |   "success": false,
-                |   "message": "${exception.getMessage}"
-                |}
-                |""".stripMargin
-            ).withHeaders(("Access-Control-Allow-Origin", "*"))
+            BadRequest(ProxyService.response(success = false, exception.toString)).withHeaders(("Access-Control-Allow-Origin", "*"))
           case Success(_) =>
-            Ok(
-              """
-                |{
-                |   "success": true
-                |}
-                |""".stripMargin
-            ).as("application/json").withHeaders(("Access-Control-Allow-Origin", "*"))
+            ProxyStatus.setStatus(StatusType.green, "Mining - Mnemonic")
+            Ok(ProxyService.response(success = true)).as("application/json").withHeaders(("Access-Control-Allow-Origin", "*"))
         }
       }
       else {
-        BadRequest(
-          """
-            |{
-            |   "success": false,
-            |   "message": "Password is wrong. Send the right one or remove mnemonic file."
-            |}
-            |""".stripMargin
-        ).as("application/json").withHeaders(("Access-Control-Allow-Origin", "*"))
+        BadRequest(ProxyService.response(success = false, "Password is wrong. Send the right one or remove mnemonic file."))
+          .as("application/json").withHeaders(("Access-Control-Allow-Origin", "*"))
       }
     }
     else if (Mnemonic.address == null) {
@@ -259,32 +227,15 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
         Mnemonic.createAddress()
       } match {
         case Failure(exception) =>
-          BadRequest(
-            s"""
-               |{
-               |   "success": false,
-               |   "message": "${exception.getMessage}"
-               |}
-               |""".stripMargin
-          ).withHeaders(("Access-Control-Allow-Origin", "*"))
+          BadRequest(ProxyService.response(success = false, exception.toString)).withHeaders(("Access-Control-Allow-Origin", "*"))
         case Success(_) =>
-          Ok(
-            """
-              |{
-              |   "success": true
-              |}
-              |""".stripMargin
-          ).as("application/json").withHeaders(("Access-Control-Allow-Origin", "*"))
+          ProxyStatus.setStatus(StatusType.green, "Mining - Mnemonic")
+          Ok(ProxyService.response(success = true)).as("application/json").withHeaders(("Access-Control-Allow-Origin", "*"))
       }
     }
     else {
-      Ok(
-        """
-          |{
-          |   "success": true
-          |}
-          |""".stripMargin
-      ).as("application/json").withHeaders(("Access-Control-Allow-Origin", "*"))
+      ProxyStatus.setStatus(StatusType.green, "Mining - Mnemonic")
+      Ok(ProxyService.response(success = true)).as("application/json").withHeaders(("Access-Control-Allow-Origin", "*"))
     }
   }
 
@@ -295,35 +246,16 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
    */
   def saveMnemonic: Action[RawBuffer] = Action(parse.raw) { implicit request: Request[RawBuffer] =>
     if (Mnemonic.value == null) {
-      BadRequest(
-        """
-          |{
-          |   "success": false,
-          |   "message": "mnemonic is not created"
-          |}
-          |""".stripMargin
-      ).as("application/json").withHeaders(("Access-Control-Allow-Origin", "*"))
+      BadRequest(ProxyService.response(success = false, "mnemonic is not created")).as("application/json").withHeaders(("Access-Control-Allow-Origin", "*"))
     }
     else {
       val password = Helper.RawBufferValue(request.body).toJson.hcursor.downField("pass").as[String].getOrElse("")
       if (!Mnemonic.save(password)) {
-        BadRequest(
-          """
-            |{
-            |   "success": false,
-            |   "message": "Mnemonic file already exists. You can remove the file if you want to change it."
-            |}
-            |""".stripMargin
-        ).as("application/json").withHeaders(("Access-Control-Allow-Origin", "*"))
+        BadRequest(ProxyService.response(success = false, "Mnemonic file already exists. You can remove the file if you want to change it."))
+          .as("application/json").withHeaders(("Access-Control-Allow-Origin", "*"))
       }
       else {
-        Ok(
-          """
-            |{
-            |   "success": true
-            |}
-            |""".stripMargin
-        ).as("application/json").withHeaders(("Access-Control-Allow-Origin", "*"))
+        Ok(ProxyService.response(success = true)).as("application/json").withHeaders(("Access-Control-Allow-Origin", "*"))
       }
     }
   }

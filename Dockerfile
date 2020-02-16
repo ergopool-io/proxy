@@ -29,5 +29,5 @@ EXPOSE 9000
 WORKDIR /home/ergo
 VOLUME ["/home/ergo/proxy"]
 #ENTRYPOINT ["java", "-jar", "-D\"config.file\"=/home/ergo/proxy/proxy.conf", "/home/ergo/ergoproxy.jar"]
-ENTRYPOINT java -jar -D"config.file"=/home/ergo/proxy/proxy.conf /home/ergo/ergoproxy.jar
+ENTRYPOINT java -jar -Dconfig.file=/home/ergo/proxy/proxy.conf /home/ergo/ergoproxy.jar
 CMD [""]

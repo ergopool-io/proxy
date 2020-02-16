@@ -11,6 +11,7 @@ import scalaj.http.HttpResponse
 object Logger {
   // The logger object
   val logger = play.api.Logger("proxy")
+  val lowerLogger = play.api.Logger("proxyDebug")
 
   val messages: List[String] = new List[String]
   var messagingEnabled: Boolean = false
@@ -96,5 +97,24 @@ object Logger {
     if (this.messagingEnabled)
       this.messages.append(message)
     logger.error(message, error)
+  }
+
+  /**
+   * Logs a message with the `ERROR` level.
+   *
+   * @param message the message to log
+   */
+  def debug(message: => String): Unit = {
+    logger.error(message)
+  }
+
+  /**
+   * Logs a message with the `ERROR` level.
+   *
+   * @param message the message to log
+   * @param error the associated exception
+   */
+  def debug(message: => String, error: => Throwable): Unit = {
+    logger.debug(message, error)
   }
 }

@@ -28,14 +28,16 @@ class TestNode(port: Int) extends TestJettyServer {
   handler.addServletWithMapping(classOf[NodeServlets.P2SAddress], "/script/p2sAddress")
   handler.addServletWithMapping(classOf[NodeServlets.UTXOByIdBinaryServlet], "/utxo/byIdBinary/*")
   handler.addServletWithMapping(classOf[NodeServlets.WalletTransactionByIdServlet], "/wallet/transactionById")
+  handler.addServletWithMapping(classOf[NodeServlets.BlocksLastHeadersServlet], "/blocks/lastHeaders/10")
 }
 
 object NodeServlets {
   var proof: String = "null"
   var proofCreated: Boolean = false
   var msg: String = ""
+  var leaf: String = "17771f9ef2103611a79bdb0bc1e1bb3a39e931d7ac6581322eb51e38479f5ff6"
   var failTransaction: Boolean = false
-  val protectionAddress: String = "3WwbzW6u8hKWBcL1W7kNVMr25s2UHfSBnYtwSHvrRQt7DdPuoXrt"
+  var protectionAddress: String = "3WwbzW6u8hKWBcL1W7kNVMr25s2UHfSBnYtwSHvrRQt7DdPuoXrt"
   var walletAddresses: Vector[String] = Vector[String]()
   val transactionResponse: String =
     """
@@ -77,25 +79,7 @@ object NodeServlets {
       |  "size": 0
       |}
       |""".stripMargin
-  var unspentBoxes: String =
-    s"""
-      |[
-      |  {
-      |    "box": {
-      |      "boxId": "1ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117",
-      |      "value": 60500000000
-      |    },
-      |    "address": "$protectionAddress"
-      |  },
-      |  {
-      |    "box": {
-      |      "boxId": "1ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117",
-      |      "value": 147
-      |    },
-      |    "address": "another_address"
-      |  }
-      |]
-      |""".stripMargin
+  var unspentBoxes: String = TestResponses.unspentBoxes
 
   class ProxyServlet extends HttpServlet {
     override protected def doGet(req: HttpServletRequest, resp: HttpServletResponse): Unit = {
@@ -185,35 +169,29 @@ object NodeServlets {
     override protected def doPost(req: HttpServletRequest, resp: HttpServletResponse): Unit = {
       val body: String = Helper.readHttpServletRequestBody(req).replaceAll("\\s", "")
       resp.setContentType("application/json")
-      if (body == reqBodyCheckOneTransaction || body == reqBodyCheckTwoTransaction) {
-        proof =
-          """
-            |{
-            |  "msgPreimage" : "01fb9e35f8a73c128b73e8fde5c108228060d68f11a69359ee0fb9bfd84e7ecde6d19957ccbbe75b075b3baf1cac6126b6e80b5770258f4cec29fbde92337faeec74c851610658a40f5ae74aa3a4babd5751bd827a6ccc1fe069468ef487cb90a8c452f6f90ab0b6c818f19b5d17befd85de199d533893a359eb25e7804c8b5d7514d784c8e0e52dabae6e89a9d6ed9c84388b228e7cdee09462488c636a87931d656eb8b40f82a507008ccacbee05000000",
-            |  "txProofs" : [{
-            |    "leaf" : "642c15c62553edd8fd9af9a6f754f3c7a6c03faacd0c9b9d5b7d11052c6c6fe8",
-            |    "levels" : [
-            |      "0139b79af823a92aa72ced2c6d9e7f7f4687de5b5af7fab0ad205d3e54bda3f3ae"
-            |    ]
-            |  }]
-            |}
-            |""".stripMargin
-        proofCreated = true
-        resp.setStatus(HttpServletResponse.SC_OK)
-        resp.getWriter.print(
-          s"""
-             |{
-             |  "msg" : "$msg",
-             |  "b" : 748014723576678314041035877227113663879264849498014394977645987,
-             |  "pk" : "0278011ec0cf5feb92d61adb51dcb75876627ace6fd9446ab4cabc5313ab7b39a7",
-             |  "proof" : $proof
-             |}
-             |""".stripMargin)
-      }
-      else {
-        resp.setStatus(HttpServletResponse.SC_BAD_REQUEST)
-        resp.getWriter.print("{\"success\": false}")
-      }
+      proof =
+        s"""
+          |{
+          |  "msgPreimage" : "01fb9e35f8a73c128b73e8fde5c108228060d68f11a69359ee0fb9bfd84e7ecde6d19957ccbbe75b075b3baf1cac6126b6e80b5770258f4cec29fbde92337faeec74c851610658a40f5ae74aa3a4babd5751bd827a6ccc1fe069468ef487cb90a8c452f6f90ab0b6c818f19b5d17befd85de199d533893a359eb25e7804c8b5d7514d784c8e0e52dabae6e89a9d6ed9c84388b228e7cdee09462488c636a87931d656eb8b40f82a507008ccacbee05000000",
+          |  "txProofs" : [{
+          |    "leaf" : "$leaf",
+          |    "levels" : [
+          |      "0139b79af823a92aa72ced2c6d9e7f7f4687de5b5af7fab0ad205d3e54bda3f3ae"
+          |    ]
+          |  }]
+          |}
+          |""".stripMargin
+      proofCreated = true
+      resp.setStatus(HttpServletResponse.SC_OK)
+      resp.getWriter.print(
+        s"""
+           |{
+           |  "msg" : "$msg",
+           |  "b" : 748014723576678314041035877227113663879264849498014394977645987,
+           |  "pk" : "0278011ec0cf5feb92d61adb51dcb75876627ace6fd9446ab4cabc5313ab7b39a7",
+           |  "proof" : $proof
+           |}
+           |""".stripMargin)
     }
   }
 
@@ -415,7 +393,7 @@ object NodeServlets {
     override protected def doGet(req: HttpServletRequest, resp: HttpServletResponse): Unit = {
       resp.setContentType("application/json")
       resp.setStatus(HttpServletResponse.SC_OK)
-      resp.getWriter.print("{}")
+      resp.getWriter.print(TestResponses.info)
     }
   }
 
@@ -461,6 +439,14 @@ object NodeServlets {
     }
   }
 
+  class BlocksLastHeadersServlet extends HttpServlet {
+    override protected def doGet(req: HttpServletRequest, resp: HttpServletResponse): Unit = {
+      resp.setContentType("application/json")
+      resp.setStatus(HttpServletResponse.SC_OK)
+      resp.getWriter.print(TestResponses.last10blocks)
+    }
+  }
+
   class WalletBoxesUnspentServlet extends HttpServlet {
     override protected def doGet(req: HttpServletRequest, resp: HttpServletResponse): Unit = {
       resp.setContentType("application/json")
@@ -471,12 +457,19 @@ object NodeServlets {
 
   class WalletDeriveKeyServlet extends HttpServlet {
     override protected def doPost(req: HttpServletRequest, resp: HttpServletResponse): Unit = {
+      val address = {
+        val body = Helper.convertToJson(Helper.readHttpServletRequestBody(req))
+        if (body.hcursor.downField("derivationPath").as[String].getOrElse("") == "m/1/1")
+          "3WymuXY1Wzj9aDd3FUkj9xSefVXvf3xJtPRggdGDDAEdEjLizsKN"
+        else
+          "3WzNDhzwLBppTqPBveSs2PoMdskGBJjaURyG3xNVw1FcCMxyieWT"
+      }
       resp.setContentType("application/json")
       resp.setStatus(HttpServletResponse.SC_OK)
       resp.getWriter.print(
-        """
+        s"""
           |{
-          |  "address": "3WwbzW6u8hKWBcL1W7kNVMr25s2UHfSBnYtwSHvrRQt7DdPuoXrt"
+          |  "address": "$address"
           |}
           |""".stripMargin)
     }
