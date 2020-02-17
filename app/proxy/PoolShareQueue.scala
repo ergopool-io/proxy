@@ -2,10 +2,10 @@ package proxy
 
 import helpers.Helper
 import io.circe.Json
-import proxy.loggers.{DebugLogger, Logger}
-import scalaj.http.{Http, HttpResponse}
 import io.circe.syntax._
+import proxy.loggers.Logger
 import proxy.node.{Node, Proof, Share, Transaction}
+import scalaj.http.{Http, HttpResponse}
 
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -79,7 +79,7 @@ class PoolShareQueue {
    * @return response from the pool
    */
   private def send(onGoingQueue: mutable.Queue[Json]): HttpResponse[Array[Byte]] = {
-    DebugLogger.debug(s"Send Shares to the pool: \n${onGoingQueue.asJson}")
+    Logger.debug(s"Send Shares to the pool: \n${onGoingQueue.asJson}")
     Http(s"${Config.poolConnection}${Config.poolServerValidationRoute}")
       .header("Content-Type", "application/json")
       .postData(
@@ -112,7 +112,7 @@ class PoolShareQueue {
         breakable {
           try {
             if (isTxsP(queue.head)) {
-              DebugLogger.debug(
+              Logger.debug(
                 s"""
                   |Pool Queue found a TxsP:
                   |${queue.head}
@@ -122,14 +122,14 @@ class PoolShareQueue {
               this.proof = t._2
             }
             if (this.transaction == null || this.proof == null) {
-              DebugLogger.error(queue.toString())
-              DebugLogger.error(
+              Logger.debug(queue.toString())
+              Logger.debug(
                 s"""
                   |Empty transaction/proof:
                   |Transaction: ${this.transaction}
                   |Proof: ${this.proof}
                   |""".stripMargin)
-              queue.dropWhile(f => isShare(f))
+              queue = queue.dropWhile(f => isShare(f))
               break
             }
 
@@ -142,15 +142,17 @@ class PoolShareQueue {
               val response: HttpResponse[Array[Byte]] = send(items)
 
               // Pop request if it's accepted or rejected
-              if (true) this.popNItem(items.length) // TODO: change condition
+              if (response.isSuccess) {
+                this.popNItem(items.length)
+              }
               else if (response.isClientError) {
-                DebugLogger.error(s"Client error from the pool: \n${Helper.ArrayByte(response.body).toString}")
+                Logger.debug(s"Client error from the pool: \n${Helper.ArrayByte(response.body).toString}")
                 queue = queue.dropWhile(f => isShare(f))
                 this.transaction = null
                 this.proof = null
               }
               else {
-                DebugLogger.error(s"Internal error from the pool: \n${Helper.ArrayByte(response.body).toString}")
+                Logger.debug(s"Internal error from the pool: \n${Helper.ArrayByte(response.body).toString}")
                 Thread.sleep(5000)
               }
             }
@@ -188,7 +190,7 @@ object PoolShareQueue {
    * @param share [[Share]] body of request
    */
   def push(share: Share): Unit = {
-    DebugLogger.debug(
+    Logger.debug(
       s"""
         |New Share pushed:
         |$share
@@ -203,7 +205,7 @@ object PoolShareQueue {
    * @param shares [[Iterable]] iterable of shares
    */
   def push(shares: List[Share]): Unit = {
-    DebugLogger.debug(
+    Logger.debug(
       s"""
         |New Shares pushed:
         |$shares
@@ -219,7 +221,7 @@ object PoolShareQueue {
    * @param proof [[Proof]] proof to add
    */
   def push(txs: Transaction, proof: Proof): Unit = {
-    DebugLogger.debug(
+    Logger.debug(
       s"""
         |New Transaction & Proof pushed:
         |$txs

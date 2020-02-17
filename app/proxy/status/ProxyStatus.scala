@@ -91,7 +91,7 @@ object ProxyStatus {
    *
    * @param message [[String]] reason of being disabled
    */
-  final class NotEnoughBoxesException(message: String) extends Throwable("Not enough boxes on transaction generate") {
+  final class NotEnoughBoxesException(message: String) extends Throwable(s"Not enough boxes on transaction generate - $message") {
     ProxyStatus.setStatus(StatusType.yellow, "Mining - NotEnoughBoxes", message)
   }
 

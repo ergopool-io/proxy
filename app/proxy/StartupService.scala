@@ -1,7 +1,7 @@
 package proxy
 
 import javax.inject.Singleton
-import proxy.loggers.{DebugLogger, Logger}
+import proxy.loggers.Logger
 import proxy.node.Node
 import proxy.status.{ProxyStatus, StatusType}
 
@@ -31,7 +31,7 @@ class StartupService {
       while (Node.pk == "" || Mnemonic.address == null) Thread.sleep(500)
       Node.createProtectionScript()
       Node.fetchUnspentBoxes()
-      DebugLogger.debug(Config.lockAddress)
+      Logger.debug(Config.lockAddress)
       if (ProxyStatus.category != "Config") ProxyStatus.reset()
     } catch {
       case e: Throwable =>

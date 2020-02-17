@@ -3,15 +3,16 @@ package proxy.loggers
 import com.typesafe.config.ConfigFactory
 import helpers.{Helper, List}
 import io.circe.Json
-import io.circe.syntax._
 import io.circe.parser.parse
+import io.circe.syntax._
 import play.api.mvc.{RawBuffer, Request}
+import proxy.Config
 import scalaj.http.HttpResponse
 
 object Logger {
   // The logger object
-  val logger = play.api.Logger("proxy")
-  val lowerLogger = play.api.Logger("proxyDebug")
+  private val logger = play.api.Logger("proxy")
+  private val enabled: Boolean = Config.debug
 
   val messages: List[String] = new List[String]
   var messagingEnabled: Boolean = false
@@ -100,21 +101,40 @@ object Logger {
   }
 
   /**
-   * Logs a message with the `ERROR` level.
+   * Logs a message with the `WARN` level.
    *
    * @param message the message to log
    */
   def debug(message: => String): Unit = {
-    logger.error(message)
+    if (this.enabled) logger.warn(message)
   }
 
   /**
-   * Logs a message with the `ERROR` level.
+   * Logs a message with the `WARN` level.
    *
    * @param message the message to log
    * @param error the associated exception
    */
   def debug(message: => String, error: => Throwable): Unit = {
-    logger.debug(message, error)
+    if (this.enabled) logger.warn(message, error)
+  }
+
+  /**
+   * Logs a message with the `INFO` level.
+   *
+   * @param message the message to log
+   */
+  def info(message: => String): Unit = {
+    logger.info(message)
+  }
+
+  /**
+   * Logs a message with the `INFO` level.
+   *
+   * @param message the message to log
+   * @param error the associated exception
+   */
+  def info(message: => String, error: => Throwable): Unit = {
+    logger.info(message, error)
   }
 }

@@ -2,7 +2,7 @@ package proxy.node
 
 import helpers.Helper
 import io.circe.Json
-import proxy.loggers.{DebugLogger, Logger}
+import proxy.loggers.Logger
 import proxy.status.ProxyStatus
 import proxy.{Config, PoolShareQueue, Response}
 
@@ -59,7 +59,7 @@ class MiningCandidate(response: Response) {
       throw new Throwable("Can not read Key = \"msg\"")
     })
     if (header != Config.blockHeader) {
-      DebugLogger.debug(
+      Logger.debug(
         s"""
           |New header is found: {
           |   old-header: ${Config.blockHeader}
@@ -92,8 +92,12 @@ class MiningCandidate(response: Response) {
       try {
         Config.genTransactionInProcess = true
         val candidate = Node.createProof()
-        if (candidate != null) this.resp = candidate
-        cursor.downField("msg").as[String].getOrElse(null)
+        if (candidate != null) {
+          this.resp = candidate
+          cursor.downField("msg").as[String].getOrElse(null)
+        }
+        else
+          null
       }
       catch {
         case error: Throwable =>

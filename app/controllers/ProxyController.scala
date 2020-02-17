@@ -1,22 +1,20 @@
 package controllers
 
-import helpers.Helper
-import proxy.action.MiningAction
-import javax.inject._
-import play.api.mvc._
-import play.api.http.HttpEntity
 import akka.util.ByteString
+import helpers.Helper
 import io.circe.Json
 import io.circe.syntax._
-import io.swagger.v3.oas.models.responses.{ApiResponse, ApiResponses}
-import io.swagger.v3.parser.OpenAPIV3Parser
-import io.swagger.v3.oas.models.OpenAPI
 import io.swagger.v3.core.util.Yaml
+import io.swagger.v3.oas.models.OpenAPI
+import io.swagger.v3.parser.OpenAPIV3Parser
+import javax.inject._
+import play.api.http.HttpEntity
+import play.api.mvc._
+import proxy.action.MiningAction
 import proxy.loggers.Logger
 import proxy.node.{MiningCandidate, Node}
 import proxy.status.{ProxyStatus, StatusType}
-import proxy.{Config, Pool, PoolShareQueue, ProxyService, ProxySwagger, Response}
-import proxy.Mnemonic
+import proxy._
 
 import scala.util.{Failure, Success, Try}
 
@@ -106,8 +104,8 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
       val nodeResponse: Response = Node.sendRequest("/mining/candidate", request)
 
       if (nodeResponse.statusCode == 200) {
+        Node.pk = Helper.ArrayByte(nodeResponse.body).toJson.hcursor.downField("pk").as[String].getOrElse(Node.pk)
         nodeResponse.body = new MiningCandidate(nodeResponse).getResponse.map(_.toByte).toArray
-
       }
       Result(
         header = ResponseHeader(nodeResponse.statusCode, nodeResponse.headers),

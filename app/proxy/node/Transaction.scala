@@ -34,7 +34,7 @@ case class Transaction(id: String, details: Json) {
    * @param address the address of boxes
    * @return
    */
-  def boxes(address: String = null): Vector[ProxyBox] = {
+  def outputBoxes(address: String = null): Vector[ProxyBox] = {
     val ergoClient = RestApiErgoClient.create(Config.nodeConnection, Config.networkType, Config.apiKey)
 
     ergoClient.execute((ctx: BlockchainContext) => {
@@ -46,6 +46,19 @@ case class Transaction(id: String, details: Json) {
           jsonBoxes = jsonBoxes :+ val0
       })
       jsonBoxes
+    })
+  }
+
+  def inputBoxes: Vector[SignedInput] = {
+    val ergoClient = RestApiErgoClient.create(Config.nodeConnection, Config.networkType, Config.apiKey)
+
+    ergoClient.execute((ctx: BlockchainContext) => {
+      val tx = ctx.signedTxFromJson(this.details.toString())
+      var boxes = Vector[SignedInput]()
+      tx.getSignedInputs.forEach(f => {
+        boxes = boxes :+ f
+      })
+      boxes
     })
   }
 }

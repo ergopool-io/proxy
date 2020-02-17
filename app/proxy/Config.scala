@@ -18,7 +18,7 @@ object Config {
   // Default configuration for application
   val config = Configuration(ConfigFactory.load())
   // Addresses to use in protection script
-  lazy val minerAddress: String = Node.deriveKey(Helper.readConfig(config, "node.address.miner"))
+  lazy val minerAddress: String = Node.deriveKey("m")
   lazy val withdrawAddress: String = Node.deriveKey(Helper.readConfig(config, "node.address.withdraw"))
   val playSecret: String = Helper.readConfig(config, "play.http.secret.key")
   // Api Key

@@ -7,7 +7,7 @@ import org.ergoplatform.appkit._
 import org.ergoplatform.appkit.impl.BlockchainContextImpl
 import org.ergoplatform.restapi.client.{NodeInfo, WalletBox}
 import play.api.mvc.{RawBuffer, Request}
-import proxy.loggers.{DebugLogger, Logger}
+import proxy.loggers.Logger
 import proxy.status.ProxyStatus.{MiningDisabledException, NotEnoughBoxesException}
 import proxy.status.{ProxyStatus, StatusType}
 import proxy.{Config, PoolShareQueue, Response}
@@ -194,7 +194,7 @@ object Node {
    */
   def candidateWithTxs(): HttpResponse[Array[Byte]] = {
     val reqHeaders: Seq[(String, String)] = Seq(("api_key", Config.apiKey), ("Content-Type", "application/json"))
-    DebugLogger.debug(
+    Logger.debug(
       s"""
         |List of transactions for candidateWithTxs:
         |${this.txsList}
@@ -206,7 +206,6 @@ object Node {
          |]
          |""".stripMargin
     val response = Http(s"${Config.nodeConnection}/mining/candidateWithTxs").headers(reqHeaders).postData(candidateWithTxsBody).asBytes
-    this.pk = Helper.ArrayByte(response.body).toJson.hcursor.downField("pk").as[String].getOrElse("")
 
     response
   }
@@ -239,16 +238,18 @@ object Node {
       .headers(("api_key", Config.apiKey), ("Content-Type", "application/json")).asBytes
 
     if (response.isSuccess) {
-      DebugLogger.debug(Helper.ArrayByte(response.body).toString)
+      Logger.debug(Helper.ArrayByte(response.body).toString)
       Helper.ArrayByte(response.body).toJson.asArray.getOrElse(Vector()).foreach(box => {
         val gson = new Gson()
         val walletBox = gson.fromJson(box.toString(), classOf[WalletBox])
+        this.unprotectedUnspentBoxes = Vector[ProxyBox]()
+        this.protectedUnspentBoxes = Vector[ProxyBox]()
         this.addWalletBox(walletBox)
         this.inclusionHeight = math.max(walletBox.getInclusionHeight, this.inclusionHeight)
       })
     }
     else {
-      DebugLogger.debug(
+      Logger.debug(
         s"""
           |Error in fetching unspent boxes:
           |${Helper.ArrayByte(response.body).toString}
@@ -304,7 +305,7 @@ object Node {
    * @param transaction the transaction containing boxes
    */
   def addBoxes(transaction: Transaction): Unit = {
-    protectedUnspentBoxes = protectedUnspentBoxes ++ transaction.boxes(this.lastProtectionAddress)
+    protectedUnspentBoxes = protectedUnspentBoxes ++ transaction.outputBoxes(this.lastProtectionAddress)
   }
 
   /**
@@ -450,8 +451,18 @@ object Node {
         this.unprotectedUnspentBoxes,
         this.configuredTransactionTotalValue
       )
-      if (this.boxesTotalValue(neededBoxes) < this.configuredTransactionTotalValue) {
-        throw new MiningDisabledException("Not enough boxes")
+      val unprotectedTotalVal = this.boxesTotalValue(neededBoxes)
+      if (unprotectedTotalVal < this.configuredTransactionTotalValue) {
+        fillUnspentBoxes(this.configuredTransactionTotalValue, unprotectedTotalVal)
+
+        this.unprotectedUnspentBoxes.foreach(box => box.spent = false)
+        val neededBoxes2 = this.getBoxes(
+          this.unprotectedUnspentBoxes,
+          this.configuredTransactionTotalValue
+        )
+        if (this.boxesTotalValue(neededBoxes2) < this.boxesTotalValue(neededBoxes)) {
+          throw new MiningDisabledException("Not enough boxes")
+        }
       }
 
 
@@ -459,7 +470,7 @@ object Node {
 
       this.sendTransaction(this._gapTransaction)
 
-      Logger.logger.info(_gapTransaction.id)
+      Logger.info(_gapTransaction.id)
       throw new MiningDisabledException("Should wait until transaction being mined", "TxsGen")
     }
 
@@ -488,6 +499,14 @@ object Node {
     }
   }
 
+  def isBoxExists(boxId: String): Boolean = {
+    val response = Http(s"${Config.nodeConnection}/utxo/byId/$boxId").header("Content-Type", "application/json").asBytes
+    if (response.isSuccess)
+      true
+    else
+      false
+  }
+
   /**
    * Generate transaction and make a new proof
    *
@@ -505,7 +524,7 @@ object Node {
       val candidateWithTxsResponse = this.candidateWithTxs()
       this.resetTxsList()
 
-      DebugLogger.debug(
+      Logger.debug(
         s"""
           |CandidateWithTxs response:
           |${Helper.ArrayByte(candidateWithTxsResponse.body).toString}
@@ -517,11 +536,30 @@ object Node {
         Response(candidateWithTxsResponse)
       }
       else {
-        Logger.error(s"candidateWithTxs failed: ${this.parseErrorResponse(candidateWithTxsResponse)}")
-        null
+        val message = this.parseErrorResponse(candidateWithTxsResponse)
+        try {
+          val boxId = message.split(" ").apply(1)
+          if (!this.isBoxExists(boxId)) {
+            if (this.poolTransaction.inputBoxes.exists(input => input.getId.toString == boxId)) {
+              this.protectedUnspentBoxes = this.protectedUnspentBoxes.filter(box => box.getId.toString != boxId)
+              this.poolTransaction = null
+            }
+            else {
+              this.unprotectedUnspentBoxes = this.unprotectedUnspentBoxes.filter(box => box.getId.toString != boxId)
+              this.remainBoxesTransaction = null
+            }
+            this.resetTxsList()
+          }
+        }
+        catch {case _: Throwable =>}
+
+        Logger.error(s"candidateWithTxs failed: $message")
+        throw new NotEnoughBoxesException("Input box was spent")
       }
     }
     catch {
+      case error: NotEnoughBoxesException =>
+        throw error
       case error: ProxyStatus.MiningDisabledException =>
         throw error
       case error: Throwable =>
@@ -562,7 +600,7 @@ object Node {
   private def sendTransaction(transaction: Transaction): Unit = {
     this.ergoClient.execute(ctx => {
       val tx = ctx.signedTxFromJson(transaction.details.toString())
-      Logger.logger.info(ctx.sendTransaction(tx))
+      Logger.info(ctx.sendTransaction(tx))
     })
   }
 
