@@ -20,7 +20,8 @@ before_script:
   - cd ergo-appkit
   - git checkout 60478389921a2aabe4d79f223f54a6bd12a09e4c
   - rm -rf target 2> /dev/null
-  - JAVA_HOME=/root/graalvm-ce-java8-19.3.1 sbt publishLocal
+  - export PATH=/root/graalvm-ce-java8-19.3.1/bin:$PATH
+  - sbt publishLocal
 
 
 stages:
