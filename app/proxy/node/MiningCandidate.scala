@@ -25,7 +25,7 @@ class MiningCandidate(response: Response) {
     }
     catch {
       case error: ProxyStatus.PoolRequestException =>
-        Logger.error(s"MiningCandidate - ${error.toString}")
+        Logger.error(s"MiningCandidate Error - ${error.toString}")
     }
     miningCandidateBody()
   }

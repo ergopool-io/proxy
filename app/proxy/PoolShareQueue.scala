@@ -79,23 +79,24 @@ class PoolShareQueue {
    * @return response from the pool
    */
   private def send(onGoingQueue: mutable.Queue[Json]): HttpResponse[Array[Byte]] = {
-    Logger.debug(s"Send Shares to the pool: \n${onGoingQueue.asJson}")
+    val body =
+      s"""
+        |{
+        |    "addresses": {
+        |        "miner": "${Config.minerAddress}",
+        |        "lock": "${Config.lockAddress}",
+        |        "withdraw": "${Config.withdrawAddress}"
+        |    },
+        |    "pk": "${Node.pk}",
+        |    "transaction": ${this.transaction.details},
+        |    "proof": ${this.proof.body},
+        |    "shares": ${onGoingQueue.asJson}
+        |}
+        |""".stripMargin
+    Logger.debug(body)
     Http(s"${Config.poolConnection}${Config.poolServerValidationRoute}")
       .header("Content-Type", "application/json")
-      .postData(
-        s"""
-          |{
-          |    "addresses": {
-          |        "miner": "${Config.minerAddress}",
-          |        "lock": "${Config.lockAddress}",
-          |        "withdraw": "${Config.withdrawAddress}"
-          |    },
-          |    "pk": "${Node.pk}",
-          |    "transaction": ${this.transaction.details},
-          |    "proof": ${this.proof.body},
-          |    "shares": ${onGoingQueue.asJson}
-          |}
-          |""".stripMargin).asBytes
+      .postData(body).asBytes
   }
 
   private def isTxsP(elem: Either[Share, (Transaction, Proof)]): Boolean = elem.isInstanceOf[Right[Share, (Transaction, Proof)]]
@@ -122,7 +123,6 @@ class PoolShareQueue {
               this.proof = t._2
             }
             if (this.transaction == null || this.proof == null) {
-              Logger.debug(queue.toString())
               Logger.debug(
                 s"""
                   |Empty transaction/proof:

@@ -9,7 +9,6 @@ import helpers.Encryption
 import javax.crypto.BadPaddingException
 import org.ergoplatform.P2PKAddress
 import org.ergoplatform.appkit._
-import proxy.loggers.Logger
 import proxy.node.Node
 
 import scala.io.Source
@@ -77,7 +76,6 @@ object Mnemonic {
     try {
       val sequence = new Encryption(key).decrypt(line)
       if (check(sequence, WordList.load(EnglishWordList).get)) {
-        Logger.error(sequence)
         _value = sequence
         true
       }

@@ -31,7 +31,7 @@ class StartupService {
       while (Node.pk == "" || Mnemonic.address == null) Thread.sleep(500)
       Node.createProtectionScript()
       Node.fetchUnspentBoxes()
-      Logger.debug(Config.lockAddress)
+      Logger.debug(s"Lock address: ${Config.lockAddress}")
       if (ProxyStatus.category != "Config") ProxyStatus.reset()
     } catch {
       case e: Throwable =>

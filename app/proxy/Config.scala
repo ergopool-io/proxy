@@ -56,12 +56,14 @@ object Config {
     // Get pool configs
     Future {
       val poolConfig: Json = Pool.specificConfig()
-      val cursor = poolConfig.hcursor
+      if (poolConfig != null) {
+        val cursor = poolConfig.hcursor
 
-      this.walletAddress = cursor.downField("wallet_address").as[String].getOrElse("")
-      this.poolDifficultyFactor = BigDecimal(cursor.downField("pool_base_factor").as[Double].getOrElse(0.0))
-      this.transactionRequestsValue = cursor.downField("reward").as[Long].getOrElse(0)
-      this.maxChunkSize = cursor.downField("max_chunk_size").as[Short].getOrElse(0)
+        this.walletAddress = cursor.downField("wallet_address").as[String].getOrElse("")
+        this.poolDifficultyFactor = BigDecimal(cursor.downField("pool_base_factor").as[Double].getOrElse(0.0))
+        this.transactionRequestsValue = cursor.downField("reward").as[Long].getOrElse(0)
+        this.maxChunkSize = cursor.downField("max_chunk_size").as[Short].getOrElse(0)
+      }
     }
   }
 }

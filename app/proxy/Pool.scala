@@ -19,12 +19,7 @@ object Pool {
   def sendSolution(request: Request[RawBuffer]): Unit = {
     val requestBody: Json = Helper.RawBufferValue(request.body).toJson
     val cursor = requestBody.hcursor
-    try {
-      PoolShareQueue.push(Share(cursor))
-    } catch {
-      case error: Throwable =>
-        Logger.error(error.toString)
-    }
+    PoolShareQueue.push(Share(cursor))
   }
 
   /**
@@ -43,12 +38,12 @@ object Pool {
         return config(Config.poolServerSpecificConfigRoute)
       } catch {
         case error: Throwable =>
-          Logger.error(s"Node: ${error.toString}")
+          Logger.error(s"Node Error: ${error.toString}")
           ProxyStatus.setStatus(StatusType.red, "Config", s"Error getting pk from the node: ${error.toString}")
           Thread.sleep(5000)
       }
     }
-    Json.Null // dummy return for compilation
+    Json.Null // Dummy return for compilation
   }
 
   /**
@@ -64,9 +59,14 @@ object Pool {
           ProxyStatus.setStatus(StatusType.green, "Config")
           return Helper.ArrayByte(response.body).toJson
         }
+        else {
+          ProxyStatus.setStatus(StatusType.red, "Config")
+          Logger.error(s"Internal Error From Pool: \n${Helper.ArrayByte(response.body).toString}")
+          return Json.Null
+        }
       } catch {
         case error: Throwable =>
-          Logger.error(s"Pool: ${error.toString}")
+          Logger.error(s"Request to pool: ${error.toString}")
           ProxyStatus.setStatus(StatusType.red, "Config", s"Error getting config from the pool: ${error.toString}")
           Thread.sleep(5000)
       }

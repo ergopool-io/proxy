@@ -1,10 +1,10 @@
+import javax.inject.Singleton
 import play.api.http.HttpErrorHandler
-import play.api.mvc._
 import play.api.mvc.Results._
+import play.api.mvc._
+import proxy.loggers.Logger
 
 import scala.concurrent._
-import javax.inject.Singleton
-import proxy.loggers.Logger
 
 @Singleton
 class ErrorHandler extends HttpErrorHandler {
@@ -29,7 +29,7 @@ class ErrorHandler extends HttpErrorHandler {
           |{
           |   "error": 500,
           |   "reason": "Internal Server Error",
-          |   "detail": "${exception.toString}"
+          |   "detail": "${exception.getMessage}"
           |}
           |""".stripMargin).as("application/json")
     )

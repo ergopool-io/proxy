@@ -239,11 +239,11 @@ object Node {
 
     if (response.isSuccess) {
       Logger.debug(Helper.ArrayByte(response.body).toString)
+      this.unprotectedUnspentBoxes = Vector[ProxyBox]()
+      this.protectedUnspentBoxes = Vector[ProxyBox]()
       Helper.ArrayByte(response.body).toJson.asArray.getOrElse(Vector()).foreach(box => {
         val gson = new Gson()
         val walletBox = gson.fromJson(box.toString(), classOf[WalletBox])
-        this.unprotectedUnspentBoxes = Vector[ProxyBox]()
-        this.protectedUnspentBoxes = Vector[ProxyBox]()
         this.addWalletBox(walletBox)
         this.inclusionHeight = math.max(walletBox.getInclusionHeight, this.inclusionHeight)
       })
