@@ -15,7 +15,7 @@ import scala.io.Source
 
 object Mnemonic {
   private val filename: String = Config.mnemonicFilename
-  private[this] var _value: String = _
+  private var _value: String = _
   private var _address: P2PKAddress = _
 
   /**

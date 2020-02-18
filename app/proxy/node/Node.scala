@@ -401,9 +401,8 @@ object Node {
    */
   def poolTransaction(totalToSpend: Long, boxes: Vector[ProxyBox]): Transaction = {
     require(boxes.nonEmpty, s"Not enough boxes in the wallet to pay $totalToSpend")
-    val ergoClient = RestApiErgoClient.create(Config.nodeConnection, Config.networkType, Config.apiKey)
 
-    val txJson = ergoClient.execute((ctx: BlockchainContext) => {
+    val txJson = this.ergoClient.execute((ctx: BlockchainContext) => {
       val prover = ctx.newProverBuilder()
         .withMnemonic(Mnemonic.create(SecretString.create(proxy.Mnemonic.value), SecretString.create("")))
         .build()
