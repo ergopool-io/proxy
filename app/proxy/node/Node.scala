@@ -29,7 +29,7 @@ object Node {
   private var _lastProtectionAddress: String = _
   private var remainBoxesTransaction: Transaction = _
   private var txsList: Vector[Transaction] = Vector[Transaction]()
-  private var poolTransaction: Transaction = _
+  var lastPoolTransaction: Transaction = _
   private var _gapTransaction: Transaction = _
 
   /**
@@ -53,7 +53,7 @@ object Node {
    *
    * @return id of last pool transaction
    */
-  def lastPoolTransactionId: String = if (this.poolTransaction != null) this.poolTransaction.id else null
+  def lastPoolTransactionId: String = if (this.lastPoolTransaction != null) this.lastPoolTransaction.id else null
 
   /**
    * Call derive key endpoint of node to get address from key
@@ -184,6 +184,7 @@ object Node {
          |  "inputsRaw": [${if (inputsRaw != null) inputsRaw.map(f => s""""${f.bytes}"""").mkString(",") else ""}]
          |}
          |""".stripMargin
+    Logger.debug(transactionGenerateBody)
     Http(s"${Config.nodeConnection}/wallet/transaction/generate").headers(reqHeaders).postData(transactionGenerateBody).asBytes
   }
 
@@ -241,11 +242,13 @@ object Node {
       Logger.debug(Helper.ArrayByte(response.body).toString)
       this.unprotectedUnspentBoxes = Vector[ProxyBox]()
       this.protectedUnspentBoxes = Vector[ProxyBox]()
-      Helper.ArrayByte(response.body).toJson.asArray.getOrElse(Vector()).foreach(box => {
-        val gson = new Gson()
-        val walletBox = gson.fromJson(box.toString(), classOf[WalletBox])
-        this.addWalletBox(walletBox)
-        this.inclusionHeight = math.max(walletBox.getInclusionHeight, this.inclusionHeight)
+      this.ergoClient.execute((ctx: BlockchainContext) => {
+        Helper.ArrayByte(response.body).toJson.asArray.getOrElse(Vector()).foreach(box => {
+          val gson = new Gson()
+          val walletBox = gson.fromJson(box.toString(), classOf[WalletBox])
+          this.addWalletBox(ctx, walletBox)
+          this.inclusionHeight = math.max(walletBox.getInclusionHeight, this.inclusionHeight)
+        })
       })
     }
     else {
@@ -264,15 +267,13 @@ object Node {
    *
    * @param walletBox the box to add to the lists
    */
-  def addWalletBox(walletBox: WalletBox): Unit = {
-    ergoClient.execute((ctx: BlockchainContext) => {
-      val proxyBox = ProxyBox(ctx, walletBox.getBox)
-      if (walletBox.getAddress == this.lastProtectionAddress)
-        this.protectedUnspentBoxes = this.protectedUnspentBoxes :+ proxyBox
-      else {
-        this.unprotectedUnspentBoxes = this.unprotectedUnspentBoxes :+ proxyBox
-      }
-    })
+  def addWalletBox(ctx: BlockchainContext, walletBox: WalletBox): Unit = {
+    val proxyBox = ProxyBox(ctx, walletBox.getBox)
+    if (walletBox.getAddress == this.lastProtectionAddress)
+      this.protectedUnspentBoxes = this.protectedUnspentBoxes :+ proxyBox
+    else {
+      this.unprotectedUnspentBoxes = this.unprotectedUnspentBoxes :+ proxyBox
+    }
   }
 
   // $COVERAGE-ON$
@@ -284,7 +285,6 @@ object Node {
   def checkRemainBoxesTransaction(): Unit = {
     if (this.remainBoxesTransaction != null && this.remainBoxesTransaction.isMined) {
       this.removeUnprotectedSpentBoxes()
-      this.addTransaction(this.remainBoxesTransaction)
       this.addBoxes(this.remainBoxesTransaction)
       this.remainBoxesTransaction = null
     }
@@ -356,10 +356,9 @@ object Node {
    * add its boxes to the lists if it had been mined
    */
   def checkPoolTransaction(): Unit = {
-    if (this.poolTransaction != null && this.poolTransaction.isMined) {
+    if (this.lastPoolTransaction != null && this.lastPoolTransaction.isMined) {
       this.removeProtectedSpentBoxes()
-      this.addBoxes(this.poolTransaction)
-      this.poolTransaction = null
+      this.lastPoolTransaction = null
     }
   }
 
@@ -399,7 +398,7 @@ object Node {
    * @param boxes        boxes to spend for transaction
    * @return created transaction
    */
-  def poolTransaction(totalToSpend: Long, boxes: Vector[ProxyBox]): Transaction = {
+  def generatePoolTransaction(totalToSpend: Long, boxes: Vector[ProxyBox]): Transaction = {
     require(boxes.nonEmpty, s"Not enough boxes in the wallet to pay $totalToSpend")
 
     val txJson = this.ergoClient.execute((ctx: BlockchainContext) => {
@@ -454,22 +453,20 @@ object Node {
       if (unprotectedTotalVal < this.configuredTransactionTotalValue) {
         fillUnspentBoxes(this.configuredTransactionTotalValue, unprotectedTotalVal)
 
-        this.unprotectedUnspentBoxes.foreach(box => box.spent = false)
         val neededBoxes2 = this.getBoxes(
           this.unprotectedUnspentBoxes,
           this.configuredTransactionTotalValue
         )
-        if (this.boxesTotalValue(neededBoxes2) < this.boxesTotalValue(neededBoxes)) {
+        if (this.boxesTotalValue(neededBoxes2) < this.configuredTransactionTotalValue) {
           throw new MiningDisabledException("Not enough boxes")
         }
       }
-
 
       this._gapTransaction = this.generateProtectedTransaction(this.configuredTransactionTotalValue - boxesValueSum)
 
       this.sendTransaction(this._gapTransaction)
 
-      Logger.info(_gapTransaction.id)
+      Logger.debug(_gapTransaction.toString)
       throw new MiningDisabledException("Should wait until transaction being mined", "TxsGen")
     }
 
@@ -479,7 +476,7 @@ object Node {
       markSpent = true
     )
 
-    this.poolTransaction(Config.transactionRequestsValue, boxesNeededForTransaction)
+    this.generatePoolTransaction(Config.transactionRequestsValue, boxesNeededForTransaction)
   }
 
   /**
@@ -514,14 +511,13 @@ object Node {
   def createProof(): Response = {
     try {
       PoolShareQueue.lock()
-      this.poolTransaction = this.generateTransactionWithProtectedUnspentBoxes()
+      this.lastPoolTransaction = this.generateTransactionWithProtectedUnspentBoxes()
 
-      this.addTransaction(this.poolTransaction)
+      this.addTransaction(this.lastPoolTransaction)
 
       this.handleRemainUnspentBoxes()
 
       val candidateWithTxsResponse = this.candidateWithTxs()
-      this.resetTxsList()
 
       Logger.debug(
         s"""
@@ -531,7 +527,7 @@ object Node {
 
       if (candidateWithTxsResponse.isSuccess) {
         val proof = Proof(Helper.ArrayByte(candidateWithTxsResponse.body).toJson.hcursor.downField("proof").as[Json].getOrElse(Json.Null), this.lastPoolTransactionId)
-        PoolShareQueue.push(this.poolTransaction, proof)
+        PoolShareQueue.push(this.lastPoolTransaction, proof)
         Response(candidateWithTxsResponse)
       }
       else {
@@ -539,15 +535,14 @@ object Node {
         try {
           val boxId = message.split(" ").apply(1)
           if (!this.isBoxExists(boxId)) {
-            if (this.poolTransaction.inputBoxes.exists(input => input.getId.toString == boxId)) {
+            if (this.lastPoolTransaction.inputBoxes.exists(input => input.getId.toString == boxId)) {
               this.protectedUnspentBoxes = this.protectedUnspentBoxes.filter(box => box.getId.toString != boxId)
-              this.poolTransaction = null
+              this.lastPoolTransaction = null
             }
-            else {
+            else if (this.remainBoxesTransaction.inputBoxes.exists(input => input.getId.toString == boxId)) {
               this.unprotectedUnspentBoxes = this.unprotectedUnspentBoxes.filter(box => box.getId.toString != boxId)
               this.remainBoxesTransaction = null
             }
-            this.resetTxsList()
           }
         }
         catch {case _: Throwable =>}
@@ -559,13 +554,14 @@ object Node {
     catch {
       case error: NotEnoughBoxesException =>
         throw error
-      case error: ProxyStatus.MiningDisabledException =>
+      case error: MiningDisabledException =>
         throw error
       case error: Throwable =>
         ProxyStatus.disableMining(s"Creating proof failed: ${error.toString}")
         throw error
     }
     finally {
+      this.resetTxsList()
       PoolShareQueue.unlock()
     }
   }
@@ -641,7 +637,7 @@ object Node {
   private def getBoxes(boxes: Vector[ProxyBox], amount: Long, markSpent: Boolean = false): Vector[ProxyBox] = {
     var total = 0L
     var response = Vector[ProxyBox]()
-    boxes.iterator.takeWhile(_ => total <= this.configuredTransactionTotalValue).foreach(box => {
+    boxes.iterator.takeWhile(_ => total < this.configuredTransactionTotalValue).foreach(box => {
       total = total + box.getValue
       response = response :+ box
       if (markSpent) box.spent = true
@@ -659,22 +655,24 @@ object Node {
   private def fillUnspentBoxes(value: Long, currentValue: Long): Unit = {
     var boxesValueSum = currentValue
     val height = this.getInfo.getFullHeight
-    while (boxesValueSum < value) {
-      if (height > this.inclusionHeight) {
-        val boxes = getNextUnspentBoxesBatch(height)
-        boxes.foreach(box => {
-          boxesValueSum = boxesValueSum + box.getBox.getValue
-          this.addWalletBox(box)
-        })
-        this.inclusionHeight = this.inclusionHeight + this.heightBatchSize
+    this.ergoClient.execute((ctx: BlockchainContext) => {
+      while (boxesValueSum < value) {
+        if (height > this.inclusionHeight) {
+          val boxes = getNextUnspentBoxesBatch(height)
+          boxes.foreach(box => {
+            boxesValueSum = boxesValueSum + box.getBox.getValue
+            this.addWalletBox(ctx, box)
+          })
+          this.inclusionHeight = this.inclusionHeight + this.heightBatchSize
+        }
+        else {
+          this.fetchUnspentBoxes()
+          boxesValueSum = this.unspentBoxesTotalValue(this.unprotectedUnspentBoxes)
+          if (boxesValueSum < value)
+            throw new MiningDisabledException("Not enough boxes!")
+        }
       }
-      else {
-        this.fetchUnspentBoxes()
-        boxesValueSum = this.unspentBoxesTotalValue(this.unprotectedUnspentBoxes)
-        if (boxesValueSum < value)
-          throw new MiningDisabledException("Not enough boxes!")
-      }
-    }
+    })
   }
 
   /**
@@ -694,7 +692,7 @@ object Node {
       this.unprotectedUnspentBoxes.filter(box => !box.spent),
       value,
       markSpent = true
-    ) // mark spent to false if not mined
+    ) // Mark spent to false if not mined
 
     val response = this.generateTransaction(address = this.lastProtectionAddress, value, neededBoxes)
     if (!response.isSuccess) {

@@ -62,7 +62,7 @@ object ProxyStatus {
    * @param reason   [[String]] reason for this status if not green
    */
   def setStatus(health: Short, category: String = "", reason: String = ""): Unit = {
-    if (this.isHealthy || this._category == category) {
+    if (this.isWorking || this._category == category) {
       this.health.set(health)
       this._category = category
       this._reason = reason

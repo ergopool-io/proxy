@@ -119,16 +119,10 @@ class PoolShareQueue {
                   |${queue.head}
                   |""".stripMargin)
               val t = queue.dequeue().asInstanceOf[Right[Share, (Transaction, Proof)]].value
-              if (t._1 != null) this.transaction = t._1
+              this.transaction = t._1
               this.proof = t._2
             }
             if (this.transaction == null || this.proof == null) {
-              Logger.debug(
-                s"""
-                  |Empty transaction/proof:
-                  |Transaction: ${this.transaction}
-                  |Proof: ${this.proof}
-                  |""".stripMargin)
               queue = queue.dropWhile(f => isShare(f))
               break
             }
@@ -166,10 +160,6 @@ class PoolShareQueue {
         }
       }
       this.isRunning = false
-
-      if (this.transaction == null && this.proof == null && queue.isEmpty) {
-        Node.createProof()
-      }
     }
   }
 }

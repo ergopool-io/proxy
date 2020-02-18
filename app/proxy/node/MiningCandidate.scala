@@ -85,7 +85,7 @@ class MiningCandidate(response: Response) {
     }
 
     if (proof != null) {
-      PoolShareQueue.push(null, proof)
+      PoolShareQueue.push(Node.lastPoolTransaction, proof)
       null
     }
     else {
