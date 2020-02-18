@@ -18,6 +18,7 @@ before_script:
   - tar -xf graalvm-ce-java8-linux-amd64-19.3.1.tar.gz
   - git clone --single-branch --branch develop https://github.com/aslesarenko/ergo-appkit.git
   - cd ergo-appkit
+  - git checkout 60478389921a2aabe4d79f223f54a6bd12a09e4c
   - rm -rf target 2> /dev/null
   - JAVA_HOME=/root/graalvm-ce-java8-19.3.1 sbt publishLocal
 
