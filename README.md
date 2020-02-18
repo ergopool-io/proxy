@@ -15,17 +15,18 @@ edition should be enough for Ergo Appkit library.
 
 First you need to download an archive with the [latest
 release](https://github.com/oracle/graal/releases) of GraalVM (e.g.
-`graalvm-ce-darwin-amd64-19.2.1.tar.gz`) for MacOS and put the programs from it
+`graalvm-ce-java8-linux-amd64-19.3.1.tar.gz`) for Linux and put the programs from it
 onto the `$PATH`.
 
-```shell
+```shell script
 cd <your/directory/with/downloaded/graal>
-tar -zxf graalvm-ce-darwin-amd64-19.2.1.tar.gz
-export GRAAL_HOME=<your/directory/with/downloaded/graal>/graalvm-ce-19.2.1/Contents/Home
+tar -zxf graalvm-ce-java8-linux-amd64-19.3.1.tar.gz
+export GRAAL_HOME=<your/directory/with/downloaded/graal>/graalvm-ce-java8-19.3.1
 export PATH=$PATH:${GRAAL_HOME}/bin
 ```
+For mac, you can view Appkit [README](https://github.com/aslesarenko/ergo-appkit/tree/60478389921a2aabe4d79f223f54a6bd12a09e4c)
 Now it's time to build Appkit:
-```shell
+```shell script
 git clone https://github.com/aslesarenko/ergo-appkit.git -b develop
 cd ergo-appkit
 git checkout 60478389921a2aabe4d79f223f54a6bd12a09e4c
@@ -33,8 +34,8 @@ JAVA_HOME=$GRAAL_HOME sbt publishLocal
 ```
 ## Installation
 Now you have to clone and build this project:
-```shell
-git clone <THIS REPOSITROY>
+```shell script
+git clone http://github.com/ergopool-io/proxy.git
 cd ergo-proxy
 sbt assembly
 ```
