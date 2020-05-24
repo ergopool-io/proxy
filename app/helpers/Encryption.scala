@@ -4,13 +4,12 @@ import java.util.Base64
 
 import javax.crypto.{Cipher, SecretKeyFactory}
 import javax.crypto.spec.{IvParameterSpec, PBEKeySpec, SecretKeySpec}
-import proxy.Config
 
 /**
  * Encryption and Decryption using specified key with AES/CBC/PKCS5Padding algorithm
  * @param key the key to use for making secret key
  */
-class Encryption(key: String) {
+class Encryption(key: String, secret: String) {
   private val Algorithm = "AES/CBC/PKCS5Padding"
   private val _key: SecretKeySpec = setKey(key)
   private val IvSpec = new IvParameterSpec(new Array[Byte](16))
@@ -21,7 +20,7 @@ class Encryption(key: String) {
    * @return secret key
    */
   private def setKey(value: String): SecretKeySpec = {
-    val salt: Array[Byte] = Config.playSecret.padTo(16, '_').take(16).getBytes
+    val salt: Array[Byte] = secret.padTo(16, '_').take(16).getBytes
     val spec = new PBEKeySpec(value.toCharArray, salt, 65536, 256)
     val f = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA1")
 

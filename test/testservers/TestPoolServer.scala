@@ -1,13 +1,11 @@
 package testservers
 
+import helpers.{ConfigTrait, Helper}
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 import org.eclipse.jetty.server.Server
 import org.eclipse.jetty.servlet.ServletHandler
 
-import helpers.Helper
-import proxy.Config
-
-class TestPoolServer(port: Int) extends TestJettyServer {
+class TestPoolServer(port: Int) extends TestJettyServer with ConfigTrait {
   override val serverPort: Int = port
   override val serverName: String = "Test Pool Server"
 
@@ -17,11 +15,13 @@ class TestPoolServer(port: Int) extends TestJettyServer {
 
   server.setHandler(handler)
 
-  handler.addServletWithMapping(classOf[PoolServerServlets.ConfigServlet], Config.poolServerConfigRoute)
-  handler.addServletWithMapping(classOf[PoolServerServlets.ConfigServlet],
-    Config.poolServerSpecificConfigRoute.replaceFirst("<pk>",
+//  handler.addServletWithMapping(classOf[PoolServerServlets.ConfigServlet], Config.poolServerConfigRoute)
+  handler.addServletWithMapping(classOf[PoolServerServlets.SpecificConfigServlet],
+    readKey("pool.route.specific_config").replaceFirst("<pk>",
       "0278011ec0cf5feb92d61adb51dcb75876627ace6fd9446ab4cabc5313ab7b39a7"))
-  handler.addServletWithMapping(classOf[PoolServerServlets.InternalServerErrorServlet], Config.poolServerValidationRoute)
+//  handler.addServletWithMapping(classOf[PoolServerServlets.TransactionServlet], Config.poolServerTransactionRoute)
+//  handler.addServletWithMapping(classOf[PoolServerServlets.InternalServerErrorServlet], Config.poolServerSolutionRoute)
+//  handler.addServletWithMapping(classOf[PoolServerServlets.HeaderServlet], Config.poolServerProofRoute)
 }
 
 object PoolServerServlets {
@@ -93,7 +93,23 @@ object PoolServerServlets {
       response.getWriter.print(
         s"""
            |{
-           |    "reward": 6750000000,
+           |    "reward": 67500000000,
+           |    "wallet_address": "3WvrVTCPJ1keSdtqNL5ayzQ62MmTNz4Rxq7vsjcXgLJBwZkvHrGa",
+           |    "pool_base_factor": 10,
+           |    "max_chunk_size": 10
+           |}
+           |""".stripMargin)
+    }
+  }
+
+  class SpecificConfigServlet extends HttpServlet {
+    override protected def doGet(request: HttpServletRequest, response: HttpServletResponse): Unit = {
+      response.setContentType("application/json")
+      response.setStatus(HttpServletResponse.SC_OK)
+      response.getWriter.print(
+        s"""
+           |{
+           |    "reward": 67500000000,
            |    "wallet_address": "3WvrVTCPJ1keSdtqNL5ayzQ62MmTNz4Rxq7vsjcXgLJBwZkvHrGa",
            |    "pool_base_factor": 10,
            |    "max_chunk_size": 10

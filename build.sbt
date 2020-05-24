@@ -2,7 +2,8 @@ maintainer in Linux := "AmirHossein Bahrami <a.bahrami9675@gmail.com>"
 name := """ergo-proxy"""
 organization := "ergo"
 
-/*enablePlugins(GitVersioning)
+/*
+enablePlugins(GitVersioning)
 
 version in ThisBuild := {
   if (git.gitCurrentTags.value.nonEmpty) {
@@ -16,18 +17,50 @@ version in ThisBuild := {
   }
 }
 
-git.gitUncommittedChanges in ThisBuild := true*/
+git.gitUncommittedChanges in ThisBuild := true
+*/
 
-version := "0.4"
+version := "0.5"
 
-lazy val root = (project in file(".")).enablePlugins(PlayScala)
+lazy val root = (project in file(".")).enablePlugins(PlayScala, PlayEbean)
 
 scalaVersion := "2.12.10"
 
-libraryDependencies += guice
-libraryDependencies += "org.scalatestplus.play" %% "scalatestplus-play" % "4.0.3" % Test
-libraryDependencies += "org.scalaj" %% "scalaj-http" % "2.4.2"
+val javaVersion = settingKey[String]("The version of Java used for building.")
 
+javaVersion := System.getProperty("java.version")
+
+val java9AndSupLibraryDependencies: Seq[sbt.ModuleID] =
+  if (!javaVersion.toString.startsWith("1.8")) {
+    Seq(
+      "com.sun.activation" % "javax.activation" % "1.2.0",
+      "com.sun.xml.bind" % "jaxb-core" % "2.3.0",
+      "com.sun.xml.bind" % "jaxb-impl" % "2.3.1",
+      "javax.jws" % "javax.jws-api" % "1.1",
+      "javax.xml.bind" % "jaxb-api" % "2.3.0",
+      "javax.xml.ws" % "jaxws-api" % "2.3.1"
+    )
+  } else {
+    Seq.empty
+  }
+
+libraryDependencies += guice
+
+libraryDependencies ++= Seq(
+  "org.scalatestplus.play" %% "scalatestplus-play" % "4.0.3" % Test,
+  "org.scalaj" %% "scalaj-http" % "2.4.2",
+  "org.eclipse.jetty" % "jetty-servlet" % "9.4.24.v20191120",
+  "org.eclipse.jetty" % "jetty-server" % "9.4.24.v20191120",
+  "io.swagger.parser.v3" % "swagger-parser-v3" % "2.0.18",
+  "com.github.alanverbner" %% "bip39" % "0.1",
+  "org.xerial" % "sqlite-jdbc" % "3.30.1",
+  "com.payintech" %% "play-ebean" % "19.10",
+  "io.ebean" % "ebean-test" % "12.1.10",
+  "io.ebean.test" % "ebean-test-config" % "11.41.2",
+  "org.mockito" % "mockito-core" % "3.3.0"
+) ++ java9AndSupLibraryDependencies
+
+// Circe dependency
 val circeVersion = "0.12.3"
 
 libraryDependencies ++= Seq(
@@ -36,15 +69,7 @@ libraryDependencies ++= Seq(
   "io.circe" %% "circe-parser"
 ).map(_ % circeVersion)
 
-libraryDependencies ++= Seq(
-  "org.eclipse.jetty" % "jetty-servlet" % "9.4.24.v20191120",
-  "org.eclipse.jetty" % "jetty-server" % "9.4.24.v20191120"
-)
-
-libraryDependencies += "io.swagger.parser.v3" % "swagger-parser-v3" % "2.0.8"
-
-libraryDependencies += "com.github.alanverbner" %% "bip39" % "0.1"
-
+// Appkit dependencies
 lazy val sonatypePublic = "Sonatype Public" at "https://oss.sonatype.org/content/groups/public/"
 lazy val sonatypeReleases = "Sonatype Releases" at "https://oss.sonatype.org/content/repositories/releases/"
 lazy val sonatypeSnapshots = "Sonatype Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots/"
@@ -59,8 +84,9 @@ libraryDependencies += "org.ergoplatform" % "ergo-wallet_2.12" % "3.2.0"
 libraryDependencies += "org.ergoplatform" % "ergo-appkit_2.12" % "develop-60478389-SNAPSHOT"
 
 assemblyMergeStrategy in assembly := {
-  case PathList("META-INF", xs @ _*) => MergeStrategy.discard
-  case x => MergeStrategy.first
+  case path if path.contains("ebean") => MergeStrategy.first
+  case PathList("META-INF", _ @ _*) => MergeStrategy.discard
+  case _ => MergeStrategy.first
 }
 
 // Assembly build plugin
@@ -71,8 +97,7 @@ assemblyMergeStrategy in assembly := {
   case PathList("reference.conf") => MergeStrategy.concat
 
   case manifest if manifest.contains("MANIFEST.MF") =>
-    // We don't need manifest files since sbt-assembly will create
-    // one with the given settings
+    // We don't need the manifest files since sbt-assembly will create one with the given settings
     MergeStrategy.discard
   case referenceOverrides if referenceOverrides.contains("reference-overrides.conf") =>
     // Keep the content for all reference-overrides.conf files
@@ -85,6 +110,10 @@ assemblyMergeStrategy in assembly := {
 
 javaOptions in Test += "-Dconfig.file=conf/test.conf"
 
-coverageExcludedPackages := "<empty>;.*List.*;.*MiningAction.*;.*Logger.*;.*Helper.*;.*MiningDisabledException.*;.*NotEnoughBoxesException.*;.*PoolRequestException.*;.*route.*;.*Route.*;.*EagerLoaderModule.*;.*StartupService.*"
+coverageExcludedPackages := "<empty>;.*ProxyConfig.*;.*MiningAction.*;.*Logger.*;.*Helper.*;" +
+  ".*MiningDisabledException.*;.*route.*;.*Route.*;.*EagerLoaderModule.*;.*StartupService.*;" +
+  ".*LowerLayerNodeInterface.*;.*ProxyStatus.*;.*Status.*;.*Encryption.*;" +
+  ".*NodeClient.*;.*Pool.*;"
+
 coverageMinimum := 85
 coverageFailOnMinimum := true

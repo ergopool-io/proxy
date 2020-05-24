@@ -1,107 +1,85 @@
 package proxy.status
 
+import io.circe.{Encoder, Json}
+import io.circe.syntax._
+
 /**
  * Contains proxy status
  */
-object ProxyStatus {
-  private val health = new Health
-  private var _reason: String = "Starting Proxy"
-  private var _category: String = "Proxy"
+class ProxyStatus {
+  private val RED = "RED"
+  private val YELLOW = "YELLOW"
+  private val GREEN = "GREEN"
+  private val stats = Map[String, Status](
+    ("config", new Status(RED, "Error getting config from the pool")),
+    ("mnemonic", new Status(RED, "Load mnemonic to continue or remove the file")),
+    ("protectedTx", new Status(YELLOW, "Protected transaction is null")),
+    ("poolTx", new Status(YELLOW, "Pool transaction is null")),
+    ("activeSyncing", new Status(YELLOW, "Loading blocks and boxes from the node")),
+    ("walletLock", new Status(RED, "Wallet is lock")),
+    ("nodeError", new Status(RED, "Error from the node"))
+  )
+  val config: Status        = stats("config")
+  val mnemonic: Status      = stats("mnemonic")
+  val protectedTx: Status   = stats("protectedTx")
+  val poolTx: Status        = stats("poolTx")
+  val activeSyncing: Status = stats("activeSyncing")
+  val walletLock: Status    = stats("walletLock")
+  val nodeError: Status     = stats("nodeError")
 
   /**
-   * Reset proxy status
+   * Reset the status
    *
-   * @return
+   * @return true if operation was a success
    */
   def reset(): Unit = {
-    this.health.set(StatusType.green)
-    this._category = ""
-    this._reason = ""
-  }
-
-  /**
-   * Check if proxy is working
-   *
-   * @return true if health is not red
-   */
-  def isWorking: Boolean = this.health.isWorking
-
-  /**
-   * Getter for reason
-   *
-   * @return
-   */
-  def reason: String = this._reason
-
-  /**
-   * Getter for category
-   *
-   * @return
-   */
-  def category: String = this._category
-
-  override def toString: String = {
-    s"""
-       |{
-       |   "health": "${this.health}"
-       |   ${if (!this.isHealthy) ",\"reason\": \"[" + this._category + "] " + this._reason + "\"" else ""}
-       |}
-       |""".stripMargin
-  }
-
-  def disableMining(message: String, subCategory: String = null): Unit = {
-    val category: String = if (subCategory != null) s"Mining - $subCategory" else "Mining"
-    ProxyStatus.setStatus(StatusType.red, category, message)
-  }
-
-  /**
-   * Set status of proxy
-   *
-   * @param health   [[Short]] status of proxy
-   * @param category [[String]] category of reason
-   * @param reason   [[String]] reason for this status if not green
-   */
-  def setStatus(health: Short, category: String = "", reason: String = ""): Unit = {
-    if (this.isWorking || this._category == category) {
-      this.health.set(health)
-      this._category = category
-      this._reason = reason
-    }
+    stats.foreach(_._2.setHealthy())
   }
 
   /**
    * Check if proxy is healthy
    *
-   * @return [[Boolean]] true if is green
+   * @return [[Boolean]] true if is not red
    */
-  def isHealthy: Boolean = this.health.isHealthy
-
-  /**
-   * Exception for events that mining should be disabled
-   *
-   * @param message [[String]] reason of being disabled
-   */
-  final class MiningDisabledException(message: String, subCategory: String = null) extends Throwable(s"Mining has been disabled - $message") {
-    val category: String = if (subCategory != null) s"Mining - $subCategory" else "Mining"
-    ProxyStatus.setStatus(StatusType.red, category, message)
+  def isHealthy: Boolean = {
+    stats.forall(_._2.isHealthy)
   }
 
   /**
-   * Exception for not enough boxes exception on transaction generate
+   * Check if proxy is working
    *
-   * @param message [[String]] reason of being disabled
+   * @return
    */
-  final class NotEnoughBoxesException(message: String) extends Throwable(s"Not enough boxes on transaction generate - $message") {
-    ProxyStatus.setStatus(StatusType.yellow, "Mining - NotEnoughBoxes", message)
+  def isWorking: Boolean = {
+    stats.filter(_._2.color == RED).forall(_._2.isHealthy)
   }
 
-  /**
-   * Exception for events that proxy should be working but health is not green
-   *
-   * @param message [[String]] reason of being not healthy
-   */
-  final class PoolRequestException(message: String) extends Throwable {
-    ProxyStatus.setStatus(StatusType.yellow, "Pool", message)
+  def status: String = {
+    var isRed = false
+    var isYellow = false
+    stats.foreach(s => {
+      if (!s._2.isHealthy) {
+        if (s._2.color == RED)
+          isRed = true
+        else
+          isYellow = true
+      }
+    })
+    if (isRed) RED
+    else if (isYellow) YELLOW
+    else GREEN
   }
 
+  override def toString: String = {
+    implicit val encodeFoo: Encoder[Map[String, Status]] = (a: Map[String, Status]) => Json.obj(
+      a.map(s => (s._1, Json.fromString(s._2.toString))).toVector: _*
+    )
+    val health = status
+    s"""
+       |{
+       |   "health": "$health"
+       |   ${if (health != GREEN) ",\"reason\": " + stats.filter(s => s._2.color == health && !s._2.isHealthy) else ""}
+       |}
+       |""".stripMargin
+  }
 }

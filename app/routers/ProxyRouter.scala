@@ -1,6 +1,6 @@
 package routers
 
-import controllers.{Assets, ProxyController}
+import controllers.ProxyController
 import javax.inject.Inject
 import play.api.routing.Router.Routes
 import play.api.routing.SimpleRouter
@@ -12,7 +12,7 @@ import play.api.routing.sird._
  * @constructor create new router
  * @param controller controller to route requests to it
  */ 
-class ProxyRouter @Inject()(controller: ProxyController)(assets: Assets) extends SimpleRouter {
+class ProxyRouter @Inject()(controller: ProxyController) extends SimpleRouter {
 
   override def routes: Routes = {
     case POST(p"/mining/solution") =>
@@ -45,19 +45,10 @@ class ProxyRouter @Inject()(controller: ProxyController)(assets: Assets) extends
     case POST(p"/proxy/mnemonic/save") =>
       controller.saveMnemonic()
 
-    case GET(p"/dashboard") =>
-      assets.at("dashboard/index.html")
-
-    case GET(p"/dashboard/$path*") =>
-      assets.at(s"dashboard/$path/index.html")
-
     case GET(p"/$path*") =>
       controller.proxyPass()
 
     case POST(p"/$path*") =>
-      controller.proxyPass()
-
-    case OPTIONS(p"/$path*") =>
       controller.proxyPass()
   }
 }

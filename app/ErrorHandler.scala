@@ -2,7 +2,7 @@ import javax.inject.Singleton
 import play.api.http.HttpErrorHandler
 import play.api.mvc.Results._
 import play.api.mvc._
-import proxy.loggers.Logger
+import loggers.Logger
 
 import scala.concurrent._
 
@@ -12,12 +12,12 @@ class ErrorHandler extends HttpErrorHandler {
     Future.successful(
       Status(statusCode)(
         s"""
-          |{
-          |   "error": 500,
-          |   "reason": "Client Error",
-          |   "detail": "$message"
-          |}
-          |""".stripMargin).as("application/json")
+           |{
+           |   "error": 500,
+           |   "reason": "Client Error",
+           |   "detail": "$message"
+           |}
+           |""".stripMargin).as("application/json")
     )
   }
 
@@ -26,12 +26,12 @@ class ErrorHandler extends HttpErrorHandler {
     Future.successful(
       InternalServerError(
         s"""
-          |{
-          |   "error": 500,
-          |   "reason": "Internal Server Error",
-          |   "detail": "${exception.getMessage}"
-          |}
-          |""".stripMargin).as("application/json")
+           |{
+           |   "error": 500,
+           |   "reason": "Internal Server Error",
+           |   "detail": "${exception.getMessage}"
+           |}
+           |""".stripMargin).as("application/json")
     )
   }
 }

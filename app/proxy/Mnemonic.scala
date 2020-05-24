@@ -7,14 +7,13 @@ import java.security.SecureRandom
 import com.github.alanverbner.bip39._
 import helpers.Encryption
 import javax.crypto.BadPaddingException
+import loggers.Logger
 import org.ergoplatform.P2PKAddress
 import org.ergoplatform.appkit._
-import proxy.node.Node
 
 import scala.io.Source
 
-object Mnemonic {
-  private val filename: String = Config.mnemonicFilename
+class Mnemonic(networkType: NetworkType, filename: String, secret: String) {
   private var _value: String = _
   private var _address: P2PKAddress = _
 
@@ -24,10 +23,6 @@ object Mnemonic {
    * @return mnemonic
    */
   def value: String = this._value
-
-  private def setValue(value: String): Unit = {
-    _value = value
-  }
 
   /**
    * Address creating using mnemonic
@@ -39,21 +34,11 @@ object Mnemonic {
   /**
    * Create address using mnemonic value
    */
+  @throws(classOf[Exception])
   def createAddress(): Unit = {
-    val secretKey = JavaHelpers.seedToMasterKey(SecretString.create(this._value))
+    val secretKey = JavaHelpers.seedToMasterKey(SecretString.create(value))
     val pk = secretKey.key.publicImage
-    val nodeWalletAddress = {
-      try {
-        Node.walletAddresses.apply(0)
-      } catch {
-        case _: IndexOutOfBoundsException => throw new Throwable("Empty wallet addresses")
-      }
-    }
-    nodeWalletAddress.apply(0) match {
-      case '3' => Config.networkType = NetworkType.TESTNET
-      case '9' => Config.networkType = NetworkType.MAINNET
-    }
-    this._address = JavaHelpers.createP2PKAddress(pk, Config.networkType.networkPrefix)
+    this._address = JavaHelpers.createP2PKAddress(pk, networkType.networkPrefix)
   }
 
   /**
@@ -69,30 +54,40 @@ object Mnemonic {
    * @param key [[String]] encryption key of content
    * @return
    */
-  def read(key: String): Boolean = {
-    if (!isFileExists) return false
+  @throws(classOf[WrongPassword])
+  @throws(classOf[FileDoesNotExists])
+  def read(key: String): Unit = {
+    if (!isFileExists) throw new FileDoesNotExists
     val line = readFile()
 
     try {
-      val sequence = new Encryption(key).decrypt(line)
+      val sequence = new Encryption(key, secret).decrypt(line)
       if (check(sequence, WordList.load(EnglishWordList).get)) {
         _value = sequence
-        true
       }
-      else false
+      else throw new WrongPassword
     }
     catch {
-      case _: BadPaddingException => false
+      case _: BadPaddingException =>
+        Logger.debug("Mnemonic key was wrong!")
+        throw new WrongPassword
     }
   }
 
-  private def readFile(): String = {
+  // $COVERAGE-OFF$
+  /**
+   * Read mnemonic file
+   *
+   * @return line of the mnemonic file
+   */
+  def readFile(): String = {
     val f = Source.fromFile(filename)
     val line = f.getLines().mkString
     f.close()
 
     line
   }
+  // $COVERAGE-ON$
 
   /**
    * Check if mnemonic file exists
@@ -101,6 +96,7 @@ object Mnemonic {
    */
   def isFileExists: Boolean = Files.exists(Paths.get(filename))
 
+  // $COVERAGE-OFF$
   /**
    * Save mnemonic to the file with specified encryption key
    *
@@ -111,19 +107,22 @@ object Mnemonic {
     if (isFileExists)
       false
     else {
-      createFile(new Encryption(key).encrypt(_value))
+      createFile(new Encryption(key, secret).encrypt(_value))
       true
     }
   }
+  // $COVERAGE-ON$
 
-  private def createFile(value: String): Unit = {
+  /**
+   * Create mnemonic file
+   * @param value the value to put in the file
+   */
+  def createFile(value: String): Unit = {
     val printWriter = new PrintWriter(new File(filename).getCanonicalFile)
     printWriter.write(value)
     printWriter.close()
   }
 
-  private def reload(): Unit = {
-    _value = null
-    _address = null
-  }
+  final class FileDoesNotExists extends Throwable("Mnemonic file does not exists!")
+  final class WrongPassword extends Throwable("Can not read mnemonic with this password! Set the right one or remove mnemonic file")
 }

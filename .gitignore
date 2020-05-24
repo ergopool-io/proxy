@@ -15,3 +15,5 @@ ergo-proxy.iml
 *.log
 mnemonic
 test_mnemonic
+sqlite.db
+test.db

@@ -9,6 +9,7 @@ import play.api.mvc.RawBuffer
 object Helper {
   /**
    * Read config from the config param if there's the key, else get it from the global config
+   *
    * @param config [[Configuration]] Config that the value should be read from it
    * @param key [[String]] Key to search for in the config
    * @return [[String]] The value of the key in config
@@ -18,12 +19,27 @@ object Helper {
   }
 
   /**
+   * Change scalaj headers to a play Result header
+   *
+   * @param headers the scalaj headers to change type
+   * @return
+   */
+  def scalajHeadersToPlayHeaders(headers: Map[String, IndexedSeq[String]]): Map[String, String] = {
+    headers.map({
+      case (key, value) =>
+        key -> value.mkString(" ")
+    }).filterKeys(key => key != "Content-Type" && key != "Content-Length")
+  }
+
+  /**
    * Convert ArrayByte body
+   *
    * @param value [[Array]] The body to convert
    */
   final case class ArrayByte(value: Array[Byte]) {
     /**
      * Convert body to Json
+     *
      * @return [[Json]]
      */
     def toJson: Json = {
@@ -32,6 +48,7 @@ object Helper {
 
     /**
      * Convert body to string
+     *
      * @return [[String]]
      */
     override def toString: String = {
@@ -41,6 +58,7 @@ object Helper {
 
   /**
    * Convert String to Json
+   *
    * @param string [[String]] The string to convert
    * @return [[Json]]
    */
@@ -50,6 +68,7 @@ object Helper {
 
   /**
    * Read http servlet request body
+   *
    * @param request [[HttpServletRequest]] The request to read body
    * @return [[String]]
    */
@@ -63,11 +82,13 @@ object Helper {
 
   /**
    * Convert RawBuffer body
+   *
    * @param value [[RawBuffer]] The body to convert
    */
   final case class RawBufferValue(value: RawBuffer) {
     /**
      * Convert body to Json
+     *
      * @return [[Json]]
      */
     def toJson: Json = {
@@ -76,6 +97,7 @@ object Helper {
 
     /**
      * Convert body to string
+     *
      * @return [[String]]
      */
     override def toString: String = {

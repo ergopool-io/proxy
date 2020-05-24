@@ -1,5 +1,6 @@
 package controllers
 
+import action.MiningAction
 import akka.util.ByteString
 import helpers.Helper
 import io.circe.Json
@@ -8,12 +9,10 @@ import io.swagger.v3.core.util.Yaml
 import io.swagger.v3.oas.models.OpenAPI
 import io.swagger.v3.parser.OpenAPIV3Parser
 import javax.inject._
+import loggers.Logger
+import node._
 import play.api.http.HttpEntity
 import play.api.mvc._
-import proxy.action.MiningAction
-import proxy.loggers.Logger
-import proxy.node.{MiningCandidate, Node}
-import proxy.status.{ProxyStatus, StatusType}
 import proxy._
 
 import scala.util.{Failure, Success, Try}
@@ -25,7 +24,8 @@ import scala.util.{Failure, Success, Try}
  * @param cc Controller component
  */
 @Singleton
-class ProxyController @Inject()(cc: ControllerComponents) extends AbstractController(cc) {
+class ProxyController @Inject()(cc: ControllerComponents)(proxy: Proxy)
+  extends AbstractController(cc) {
   /**
    * Action handler for proxy passing
    *
@@ -33,18 +33,19 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
    */
   def proxyPass: Action[RawBuffer] = Action(parse.raw) { implicit request: Request[RawBuffer] =>
     // Send the request to node and get its response
-    val response: Response = Node.sendRequest(request.uri, request)
+    val response = proxy.sendRequestToNode(request)
 
     val contentType = {
-      if (response.contentType == "")
+      if (response.contentType.getOrElse("") == "")
         "plain/text"
       else
-        response.contentType
+        response.contentType.get
     }
+
     Result(
-      header = ResponseHeader(response.statusCode, response.headers),
+      header = ResponseHeader(response.code, Helper.scalajHeadersToPlayHeaders(response.headers)),
       body = HttpEntity.Strict(ByteString(response.body), Some(contentType))
-    ).withHeaders(("Access-Control-Allow-Origin", "*"))
+    )
   }
 
   /**
@@ -53,9 +54,9 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
    * @return
    */
   def reloadConfig: Action[RawBuffer] = Action(parse.raw) { implicit request: Request[RawBuffer] =>
-    Config.loadPoolConfig()
+    val success = proxy.reloadPoolQueueConfig()
 
-    Ok(ProxyService.response(success = true)).as("application/json").withHeaders(("Access-Control-Allow-Origin", "*"))
+    Ok(s"""{"success": $success}""").as("application/json")
   }
 
   /**
@@ -64,13 +65,23 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
    * @return
    */
   def resetStatus: Action[RawBuffer] = Action(parse.raw) { implicit request: Request[RawBuffer] =>
-    ProxyStatus.category match {
-      case "Config" =>
-        InternalServerError(ProxyService.response(success = false, ProxyStatus.reason)).as("application/json").withHeaders(("Access-Control-Allow-Origin", "*"))
-      case _ =>
-        ProxyStatus.reset()
-        Ok(ProxyService.response(success = true)).as("application/json").withHeaders(("Access-Control-Allow-Origin", "*"))
+    val success: Boolean = {
+      if (proxy.status.config.isHealthy) {
+        proxy.status.reset()
+        true
+      } else false
     }
+
+    if (success)
+      Ok("""{"success": true}""").as("application/json")
+    else
+      InternalServerError(
+        s"""
+          |{
+          |   "success": false,
+          |   "message": "${proxy.status.config}"
+          |}
+          |""".stripMargin).as("application/json")
   }
 
   /**
@@ -78,19 +89,22 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
    *
    * @return [[Result]] Response from the node
    */
-  def sendSolution: MiningAction[RawBuffer] = MiningAction[RawBuffer] { Action(parse.raw) { implicit request: Request[RawBuffer] =>
+  def sendSolution: MiningAction[RawBuffer] = MiningAction[RawBuffer](proxy) { Action(parse.raw) { implicit request: Request[RawBuffer] =>
     // Send the request to node and get its response
-    val response: Response = Node.sendSolution(request)
+    val response = proxy.sendSolutionToNode(request)
 
-    // Send the request to the pool server if the nodes response is 200
-    if (response.statusCode == 200) {
-      Pool.sendSolution(request)
+    // Send the request to the pool server if the node's response is 200
+    if (response.isSuccess) {
+      proxy.sendSolution(request)
+    }
+    else {
+      Logger.error(proxy.parseError(response))
     }
 
     Result(
-      header = ResponseHeader(response.statusCode, response.headers),
-      body = HttpEntity.Strict(ByteString(response.body), Some(response.contentType))
-    ).withHeaders(("Access-Control-Allow-Origin", "*"))
+      header = ResponseHeader(response.code, Helper.scalajHeadersToPlayHeaders(response.headers)),
+      body = HttpEntity.Strict(ByteString(response.body), response.contentType)
+    )
   }}
 
   /**
@@ -98,22 +112,14 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
    *
    * @return [[Result]] Response from the node with the key "pb"
    */
-  def getMiningCandidate: MiningAction[RawBuffer] = MiningAction[RawBuffer] { Action(parse.raw) { implicit request: Request[RawBuffer] =>
-    if (!Config.genTransactionInProcess) {
-      // Send the request to the node
-      val nodeResponse: Response = Node.sendRequest("/mining/candidate", request)
+  def getMiningCandidate: MiningAction[RawBuffer] = MiningAction[RawBuffer](proxy) { Action(parse.raw) { implicit request: Request[RawBuffer] =>
+    val response = proxy.getMiningCandidate
+    val respHeaders = Helper.scalajHeadersToPlayHeaders(response.headers)
 
-      if (nodeResponse.statusCode == 200) {
-        Node.pk = Helper.ArrayByte(nodeResponse.body).toJson.hcursor.downField("pk").as[String].getOrElse(Node.pk)
-        nodeResponse.body = new MiningCandidate(nodeResponse).getResponse.map(_.toByte).toArray
-      }
-      Result(
-        header = ResponseHeader(nodeResponse.statusCode, nodeResponse.headers),
-        body = HttpEntity.Strict(ByteString(nodeResponse.body), Some(nodeResponse.contentType))
-      ).withHeaders(("Access-Control-Allow-Origin", "*"))
-    } else {
-      InternalServerError.withHeaders(("Access-Control-Allow-Origin", "*"))
-    }
+    Result(
+      header = ResponseHeader(response.code, respHeaders),
+      body = HttpEntity.Strict(ByteString(response.body), response.contentType)
+    )
   }}
 
 
@@ -122,12 +128,12 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
    *
    * @return [[Result]] Response from the pool server
    */
-  def sendShare: MiningAction[RawBuffer] = MiningAction[RawBuffer] { Action(parse.raw) { implicit request: Request[RawBuffer] =>
-    val shares = ProxyService.getShareRequestBody(request)
+  def sendShare: MiningAction[RawBuffer] = MiningAction[RawBuffer](proxy) { Action(parse.raw) { implicit request: Request[RawBuffer] =>
+    val shares = Share(Helper.RawBufferValue(request.body).toJson)
 
-    PoolShareQueue.push(shares)
+    proxy.sendShares(shares)
 
-    Ok(Json.obj().toString()).as("application/json").withHeaders(("Access-Control-Allow-Origin", "*"))
+    Ok(Json.obj().toString()).as("application/json")
   }}
 
   /**
@@ -136,16 +142,24 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
    * @return [[Result]] new swagger config
    */
   def changeSwagger: Action[RawBuffer] = Action(parse.raw) { implicit request: Request[RawBuffer] =>
-    val openApi: OpenAPI = new OpenAPIV3Parser().read(s"${Config.nodeConnection}/api-docs/swagger.conf")
+    val openApi: OpenAPI = new OpenAPIV3Parser().read(s"${proxy.nodeConnection}/api-docs/swagger.conf")
 
-    val proxyOpenAPI: OpenAPI = ProxySwagger.getProxyOpenAPI(openApi)
+    val proxyOpenAPI: OpenAPI = new ProxySwaggerBuilder(openApi)
+      .addPB()
+      .addShareEndpoint()
+      .addSaveMnemonicEndpoint()
+      .addLoadMnemonicEndpoint()
+      .addConfigReload()
+      .addStatusReset()
+      .addTest()
+      .build()
 
     val yaml = Yaml.pretty(proxyOpenAPI)
 
     Result(
       header = ResponseHeader(200),
       body = HttpEntity.Strict(ByteString(yaml), Some("application/json"))
-    ).withHeaders(("Access-Control-Allow-Origin", "*"))
+    )
   }
 
   /**
@@ -155,18 +169,18 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
    */
   def changeInfo: Action[RawBuffer] = Action(parse.raw) { implicit request: Request[RawBuffer] =>
     // Send the request to the node
-    val response: Response = Node.sendRequest(request.uri, request)
+    val response = proxy.nodeInfo
 
     val respBody: Json = Helper.ArrayByte(response.body).toJson
 
-    val info: Json = Helper.convertToJson(ProxyService.proxyInfo)
+    val info: Json = Helper.convertToJson(proxy.info)
 
     val newResponseBody: Json = respBody.deepMerge(info)
 
     Result(
       header = ResponseHeader(200),
       body = HttpEntity.Strict(ByteString(newResponseBody.toString()), Some("application/json"))
-    ).withHeaders(("Access-Control-Allow-Origin", "*"))
+    )
   }
 
   // $COVERAGE-OFF$
@@ -177,20 +191,30 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
    */
   def test: Action[RawBuffer] = Action(parse.raw) { implicit request: Request[RawBuffer] =>
     Logger.messagingEnabled = true
-    Logger.messages.clear()
+    Logger.messages = Vector[String]()
     try {
-      this.getMiningCandidate.action.apply(request)
+      this.getMiningCandidate.apply(request)
     }
     catch {
       case error: Throwable =>
-        Logger.error(s"Error in mining candidate - ${error.toString}", error)
+        Logger.error(s"Error in mining candidate - ${error.getMessage}", error)
     }
     Logger.messagingEnabled = false
     if (Logger.messages.isEmpty)
-      Ok(ProxyService.response(success = true)).as("application/json").withHeaders(("Access-Control-Allow-Origin", "*"))
+      Ok(
+        """
+          |{
+          |   "success": true
+          |}
+          |""".stripMargin).as("application/json")
     else {
-      InternalServerError(ProxyService.response(success = false, Logger.messages.getAll.asJson.toString()))
-        .as("application/json").withHeaders(("Access-Control-Allow-Origin", "*"))
+      InternalServerError(
+        s"""
+          |{
+          |   "success": false,
+          |   "messages": ${Logger.messages.asJson}
+          |}
+          |""".stripMargin).as("application/json")
     }
   }
   // $COVERAGE-ON$
@@ -201,39 +225,61 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
    * @return [[Result]]
    */
   def loadMnemonic: Action[RawBuffer] = Action(parse.raw) { implicit request: Request[RawBuffer] =>
-    if (Mnemonic.value == null) {
+    if (proxy.mnemonic.value == null) {
       val password = Helper.RawBufferValue(request.body).toJson.hcursor.downField("pass").as[String].getOrElse("")
 
-      if (Mnemonic.read(password)) {
-        Try {
-          Mnemonic.createAddress()
-        } match {
-          case Failure(exception) =>
-            BadRequest(ProxyService.response(success = false, exception.toString)).withHeaders(("Access-Control-Allow-Origin", "*"))
-          case Success(_) =>
-            ProxyStatus.setStatus(StatusType.green, "Mining - Mnemonic")
-            Ok(ProxyService.response(success = true)).as("application/json").withHeaders(("Access-Control-Allow-Origin", "*"))
-        }
-      }
-      else {
-        BadRequest(ProxyService.response(success = false, "Password is wrong. Send the right one or remove mnemonic file."))
-          .as("application/json").withHeaders(("Access-Control-Allow-Origin", "*"))
-      }
-    }
-    else if (Mnemonic.address == null) {
+      proxy.mnemonic.read(password)
+      proxy.status.mnemonic.setHealthy()
       Try {
-        Mnemonic.createAddress()
+        proxy.mnemonic.createAddress()
       } match {
         case Failure(exception) =>
-          BadRequest(ProxyService.response(success = false, exception.toString)).withHeaders(("Access-Control-Allow-Origin", "*"))
+          BadRequest(
+            s"""
+              |{
+              |   "success": false,
+              |   "message": "${exception.getMessage}"
+              |}
+              |""".stripMargin
+          )
         case Success(_) =>
-          ProxyStatus.setStatus(StatusType.green, "Mining - Mnemonic")
-          Ok(ProxyService.response(success = true)).as("application/json").withHeaders(("Access-Control-Allow-Origin", "*"))
+          Ok(
+            """
+              |{
+              |   "success": true
+              |}
+              |""".stripMargin).as("application/json")
+      }
+    }
+    else if (proxy.mnemonic.address == null) {
+      Try {
+        proxy.mnemonic.createAddress()
+      } match {
+        case Failure(exception) =>
+          BadRequest(
+            s"""
+               |{
+               |   "success": false,
+               |   "message": "${exception.getMessage}"
+               |}
+               |""".stripMargin
+          )
+        case Success(_) =>
+          Ok(
+            """
+              |{
+              |   "success": true
+              |}
+              |""".stripMargin).as("application/json")
       }
     }
     else {
-      ProxyStatus.setStatus(StatusType.green, "Mining - Mnemonic")
-      Ok(ProxyService.response(success = true)).as("application/json").withHeaders(("Access-Control-Allow-Origin", "*"))
+      Ok(
+        """
+          |{
+          |   "success": true
+          |}
+          |""".stripMargin).as("application/json")
     }
   }
 
@@ -243,17 +289,33 @@ class ProxyController @Inject()(cc: ControllerComponents) extends AbstractContro
    * @return [[Result]]
    */
   def saveMnemonic: Action[RawBuffer] = Action(parse.raw) { implicit request: Request[RawBuffer] =>
-    if (Mnemonic.value == null) {
-      BadRequest(ProxyService.response(success = false, "mnemonic is not created")).as("application/json").withHeaders(("Access-Control-Allow-Origin", "*"))
+    if (proxy.mnemonic.value == null) {
+      BadRequest(
+        """
+          |{
+          |   "success": false,
+          |   "message": "mnemonic is not created"
+          |}
+          |""".stripMargin).as("application/json")
     }
     else {
       val password = Helper.RawBufferValue(request.body).toJson.hcursor.downField("pass").as[String].getOrElse("")
-      if (!Mnemonic.save(password)) {
-        BadRequest(ProxyService.response(success = false, "Mnemonic file already exists. You can remove the file if you want to change it."))
-          .as("application/json").withHeaders(("Access-Control-Allow-Origin", "*"))
+      if (!proxy.mnemonic.save(password)) {
+        BadRequest(
+          """
+            |{
+            |   "success": false,
+            |   "message": "Mnemonic file already exists. You can remove the file if you want to change it."
+            |}
+            |""".stripMargin).as("application/json")
       }
       else {
-        Ok(ProxyService.response(success = true)).as("application/json").withHeaders(("Access-Control-Allow-Origin", "*"))
+        Ok(
+          """
+            |{
+            |   "success": true
+            |}
+            |""".stripMargin).as("application/json")
       }
     }
   }
