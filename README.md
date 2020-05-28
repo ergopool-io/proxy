@@ -50,4 +50,16 @@ java -D"config.file"=path\to\config -jar ergo-proxy-assembly-0.4.jar
 ```shell script
 java -Dconfig.file=path/to/config -jar ergo-proxy-assembly-0.4.jar
 ```
+Proxy needs a mnemonic in order to function. Every time the proxy is run, It creates a new mnemonic if one does not exists. you should save the current mnemonic by going to the swagger pannel and use `/proxy/mnemonic/save` route with your desired password. After that, everytime you run the proxy, you need to load it with the previously used paassword in the swagger panel.
 
+## Using docker
+For using your config first create a config file near docker-compose file and to `/home/ergo/proxy/proxy.conf` for example:
+```
+ volumes:
+     - ./myConfig.conf:/home/ergo/proxy/proxy.conf
+```
+
+Note: After create your config file, in host for user and group set owner `9052`:
+```
+sudo chown 9052:9052 myConfig.conf
+```
