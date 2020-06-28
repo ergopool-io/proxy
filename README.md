@@ -2,6 +2,8 @@
 This project is a proxy server for [ergopool.io](https://ergopool.io)
 ## Setup
 ### Prerequisite
+#### ErgoNode
+To use the proxy, node [v3.2.7](https://github.com/ergoplatform/ergo/releases/tag/v3.2.7) or above is needed.
 #### OpenJDK 11
 [Here](https://jdk.java.net/java-se-ri/11), binaries for OpenJDK 11 exists that depend on your OS, you can install one.
 #### sbt 1.2.8
