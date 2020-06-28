@@ -868,7 +868,7 @@ class ProxyControllerSpec extends PlaySpec with MockitoSugar with BeforeAndAfter
         |          content:
         |            application/json:
         |              schema:
-        |                $ref: '#/components/schemas/ExternalCandidateBlock'
+        |                $ref: '#/components/schemas/WorkMessage'
         |        default:
         |          description: Error
         |          content:
@@ -963,7 +963,7 @@ class ProxyControllerSpec extends PlaySpec with MockitoSugar with BeforeAndAfter
         |        - api_key
         |components:
         |  schemas:
-        |    ExternalCandidateBlock:
+        |    WorkMessage:
         |      required:
         |      - b
         |      - msg

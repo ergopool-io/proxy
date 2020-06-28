@@ -320,7 +320,7 @@ class NodeClient extends NodeConfig {
     val candidateWithTxsBody: String =
       s"""
          |[
-         |  ${transactions.map(tx => s"""{"transaction": ${tx.details.noSpaces}, "cost": 50000}""").mkString(",")}
+         |  ${transactions.map(tx => s"""${tx.details.noSpaces}""").mkString(",")}
          |]
          |""".stripMargin
     Http(s"$connection/mining/candidateWithTxs").headers(authHeader).postData(candidateWithTxsBody).asBytes

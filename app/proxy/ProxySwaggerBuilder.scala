@@ -56,7 +56,7 @@ class ProxySwaggerBuilder(openAPI: OpenAPI) {
     val pbSchema = new Schema()
     pbSchema.setType("Integer")
     pbSchema.setExample(9876543210L)
-    _openAPI.getComponents.getSchemas.get("ExternalCandidateBlock").addProperties("pb", pbSchema)
+    _openAPI.getComponents.getSchemas.get("WorkMessage").addProperties("pb", pbSchema)
 
     this
   }

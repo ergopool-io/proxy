@@ -344,7 +344,7 @@ object NodeServlets {
           |          content:
           |            application/json:
           |              schema:
-          |                $ref: '#/components/schemas/ExternalCandidateBlock'
+          |                $ref: '#/components/schemas/WorkMessage'
           |        default:
           |          description: Error
           |          content:
@@ -414,7 +414,7 @@ object NodeServlets {
           |
           |  schemas:
           |    # Objects
-          |    ExternalCandidateBlock:
+          |    WorkMessage:
           |      description: Candidate block info for external miner
           |      type: object
           |      required:
