@@ -55,7 +55,7 @@ java -Dconfig.file=path/to/config -jar ergo-proxy-assembly-0.4.jar
 Proxy needs a mnemonic in order to function. Every time the proxy is run, It creates a new mnemonic if one does not exists. you should save the current mnemonic by going to the swagger pannel and use `/proxy/mnemonic/save` route with your desired password. After that, everytime you run the proxy, you need to load it with the previously used paassword in the swagger panel.
 
 ## Using docker
-For using your config first create a config file near docker-compose file and to `/home/ergo/proxy/proxy.conf` for example:
+
 ```
  volumes:
      - ./myConfig.conf:/home/ergo/proxy/proxy.conf
@@ -65,3 +65,17 @@ Note: After create your config file, in host for user and group set owner `9052`
 ```
 sudo chown 9052:9052 myConfig.conf
 ```
+
+## Docker Quick Start
+  The proxy has officially supported [Docker package](https://hub.docker.com/r/ergopoolio/proxy), for using your config first create a config file and bind to `/home/ergo/proxy/proxy.conf` for example:
+  
+  ```shell
+    $ docker run -p 9000:9000 \
+      --restart=always \
+      -v /path/on/host/to/ergo/configFile:/home/ergo/proxy/proxy.conf \
+      -d ergopoolio/proxy:latest 
+  ```
+
+You can use `9000` port to load the proxy.
+  
+  NOTE: The `/path/on/host/to/ergo/configFile` directory must have `777` permission or have owner/group numeric id equal to `9052` to be writable by the container.
