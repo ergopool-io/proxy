@@ -45,6 +45,10 @@ class ProxyRouter @Inject()(controller: ProxyController) extends SimpleRouter {
     case POST(p"/proxy/mnemonic/save") =>
       controller.saveMnemonic()
 
+    case GET(p"/") => {
+      controller.index()
+    }
+
     case GET(p"/$path*") =>
       controller.proxyPass()
 

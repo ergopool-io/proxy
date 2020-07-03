@@ -19,12 +19,12 @@ import scala.util.{Failure, Success, Try}
 
 /**
  * Proxy pass controller
- * 
+ *
  * @constructor Create new controller for proxy passing
  * @param cc Controller component
  */
 @Singleton
-class ProxyController @Inject()(cc: ControllerComponents)(proxy: Proxy)
+class ProxyController @Inject()(assets: Assets, cc: ControllerComponents)(proxy: Proxy)
   extends AbstractController(cc) {
   /**
    * Action handler for proxy passing
@@ -77,11 +77,11 @@ class ProxyController @Inject()(cc: ControllerComponents)(proxy: Proxy)
     else
       InternalServerError(
         s"""
-          |{
-          |   "success": false,
-          |   "message": "${proxy.status.config}"
-          |}
-          |""".stripMargin).as("application/json")
+         |{
+         |   "success": false,
+         |   "message": "${proxy.status.config}"
+         |}
+         |""".stripMargin).as("application/json")
   }
 
   /**
@@ -89,38 +89,42 @@ class ProxyController @Inject()(cc: ControllerComponents)(proxy: Proxy)
    *
    * @return [[Result]] Response from the node
    */
-  def sendSolution: MiningAction[RawBuffer] = MiningAction[RawBuffer](proxy) { Action(parse.raw) { implicit request: Request[RawBuffer] =>
-    // Send the request to node and get its response
-    val response = proxy.sendSolutionToNode(request)
+  def sendSolution: MiningAction[RawBuffer] = MiningAction[RawBuffer](proxy) {
+    Action(parse.raw) { implicit request: Request[RawBuffer] =>
+      // Send the request to node and get its response
+      val response = proxy.sendSolutionToNode(request)
 
-    // Send the request to the pool server if the node's response is 200
-    if (response.isSuccess) {
-      proxy.sendSolution(request)
-    }
-    else {
-      Logger.error(proxy.parseError(response))
-    }
+      // Send the request to the pool server if the node's response is 200
+      if (response.isSuccess) {
+        proxy.sendSolution(request)
+      }
+      else {
+        Logger.error(proxy.parseError(response))
+      }
 
-    Result(
-      header = ResponseHeader(response.code, Helper.scalajHeadersToPlayHeaders(response.headers)),
-      body = HttpEntity.Strict(ByteString(response.body), response.contentType)
-    )
-  }}
+      Result(
+        header = ResponseHeader(response.code, Helper.scalajHeadersToPlayHeaders(response.headers)),
+        body = HttpEntity.Strict(ByteString(response.body), response.contentType)
+      )
+    }
+  }
 
   /**
    * Action handler to put "pb" in the body of response for route /mining/candidate
    *
    * @return [[Result]] Response from the node with the key "pb"
    */
-  def getMiningCandidate: MiningAction[RawBuffer] = MiningAction[RawBuffer](proxy) { Action(parse.raw) { implicit request: Request[RawBuffer] =>
-    val response = proxy.getMiningCandidate
-    val respHeaders = Helper.scalajHeadersToPlayHeaders(response.headers)
+  def getMiningCandidate: MiningAction[RawBuffer] = MiningAction[RawBuffer](proxy) {
+    Action(parse.raw) { implicit request: Request[RawBuffer] =>
+      val response = proxy.getMiningCandidate
+      val respHeaders = Helper.scalajHeadersToPlayHeaders(response.headers)
 
-    Result(
-      header = ResponseHeader(response.code, respHeaders),
-      body = HttpEntity.Strict(ByteString(response.body), response.contentType)
-    )
-  }}
+      Result(
+        header = ResponseHeader(response.code, respHeaders),
+        body = HttpEntity.Strict(ByteString(response.body), response.contentType)
+      )
+    }
+  }
 
 
   /**
@@ -128,13 +132,15 @@ class ProxyController @Inject()(cc: ControllerComponents)(proxy: Proxy)
    *
    * @return [[Result]] Response from the pool server
    */
-  def sendShare: MiningAction[RawBuffer] = MiningAction[RawBuffer](proxy) { Action(parse.raw) { implicit request: Request[RawBuffer] =>
-    val shares = Share(Helper.RawBufferValue(request.body).toJson)
+  def sendShare: MiningAction[RawBuffer] = MiningAction[RawBuffer](proxy) {
+    Action(parse.raw) { implicit request: Request[RawBuffer] =>
+      val shares = Share(Helper.RawBufferValue(request.body).toJson)
 
-    proxy.sendShares(shares)
+      proxy.sendShares(shares)
 
-    Ok(Json.obj().toString()).as("application/json")
-  }}
+      Ok(Json.obj().toString()).as("application/json")
+    }
+  }
 
   /**
    * Change swagger config to show pool routes
@@ -210,13 +216,14 @@ class ProxyController @Inject()(cc: ControllerComponents)(proxy: Proxy)
     else {
       InternalServerError(
         s"""
-          |{
-          |   "success": false,
-          |   "messages": ${Logger.messages.asJson}
-          |}
-          |""".stripMargin).as("application/json")
+           |{
+           |   "success": false,
+           |   "messages": ${Logger.messages.asJson}
+           |}
+           |""".stripMargin).as("application/json")
     }
   }
+
   // $COVERAGE-ON$
 
   /**
@@ -236,11 +243,11 @@ class ProxyController @Inject()(cc: ControllerComponents)(proxy: Proxy)
         case Failure(exception) =>
           BadRequest(
             s"""
-              |{
-              |   "success": false,
-              |   "message": "${exception.getMessage}"
-              |}
-              |""".stripMargin
+               |{
+               |   "success": false,
+               |   "message": "${exception.getMessage}"
+               |}
+               |""".stripMargin
           )
         case Success(_) =>
           Ok(
@@ -318,5 +325,15 @@ class ProxyController @Inject()(cc: ControllerComponents)(proxy: Proxy)
             |""".stripMargin).as("application/json")
       }
     }
+  }
+
+  def index = Action {
+    Redirect("/dashboard")
+  }
+
+  def dashboard: Action[AnyContent] = assets.at("index.html")
+
+  def assetOrDefault(resource: String): Action[AnyContent] = {
+    if (resource.contains(".")) assets.at(resource) else dashboard
   }
 }

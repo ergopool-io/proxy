@@ -78,7 +78,7 @@ class ProxyStatus {
     s"""
        |{
        |   "health": "$health"
-       |   ${if (health != GREEN) ",\"reason\": " + stats.filter(s => s._2.color == health && !s._2.isHealthy) else ""}
+       |   ${if (health != GREEN) ",\"reason\": \"" + stats.filter(s => s._2.color == health && !s._2.isHealthy).toList.map(item => item._2).mkString(",") + "\"" else ""}
        |}
        |""".stripMargin
   }

@@ -36,84 +36,89 @@ trait PoolQueue {
    * Run queue if it's not already running
    */
   def runQueue(): Unit = {
-    if (!isRunning) callFutureRun()
+    if (!isRunning) {
+      isRunning = true
+      callFutureRun()
+    }
   }
 
-  def run(): Unit = {
-    isRunning = true
+  def run(exitIfEmpty: Boolean = false): Unit = {
     var clientErrorCount: Int = 0
     var lastFailedChunkLength: Int = 0
-    while (queue.nonEmpty) {
-      breakable {
-        try {
-          if (isTxsP(queue.head)) {
-            Logger.debug(
-              s"""
-                 |Pool Queue found a TxsP:
-                 |${queue.head}
-                 |""".stripMargin)
-            val t = queue.dequeue().asInstanceOf[PoolShare].value
-            transaction = t._1
-            proof = t._2
-          }
-          if (transaction == null || proof == null) {
-            Logger.debug(
-              s"""
-                |null Tx/P -> clearing queue:
-                |tx: $transaction
-                |proof: $proof
-                |----------------------------------
-                |""".stripMargin)
-            queue = queue.dropWhile(f => isShare(f))
-            break
-          }
-
-          val items = queue
-            .take(maxChunkSize)
-            .takeWhile(p => isShare(p))
-            .map(f => f.left.getOrElse(null).asInstanceOf[Share].body)
-
-          if (items.nonEmpty) { // In case of queue has been cleared between "while condition" and "take action"
-            val response: HttpResponse[Array[Byte]] = sendPacket(items, proof, transaction)
-
-            // Pop request if it's accepted or rejected
-            if (response.isSuccess) {
-              popNItem(items.length)
-              clientErrorCount = 0
-              lastFailedChunkLength = 0
+    var work: Boolean = true
+    while (work) {
+      if (queue.nonEmpty) {
+        breakable {
+          try {
+            if (isTxsP(queue.head)) {
+              Logger.debug(
+                s"""
+                   |Pool Queue found a TxsP:
+                   |${queue.head}
+                   |""".stripMargin)
+              val t = queue.dequeue().asInstanceOf[PoolShare].value
+              transaction = t._1
+              proof = t._2
             }
-            else if (response.isClientError) {
-              Logger.debug(s"Client error from the pool: \n${Helper.ArrayByte(response.body).toString}")
+            if (transaction == null || proof == null) {
+              Logger.debug(
+                s"""
+                   |null Tx/P -> clearing queue:
+                   |tx: $transaction
+                   |proof: $proof
+                   |----------------------------------
+                   |""".stripMargin)
+              queue = queue.dropWhile(f => isShare(f))
+              break
+            }
 
-              if (items.length > lastFailedChunkLength) {
-                clientErrorCount = 0
-                lastFailedChunkLength = items.length
-              }
+            val items = queue
+              .take(maxChunkSize)
+              .takeWhile(p => isShare(p))
+              .map(f => f.left.getOrElse(null).body)
 
-              if (clientErrorCount >= clientErrorMaxTry) {
-                Logger.debug("Reach maximum try - clearing chunk")
+            if (items.nonEmpty) { // In case of queue has been cleared between "while condition" and "take action"
+              val response: HttpResponse[Array[Byte]] = sendPacket(items, proof, transaction)
+
+              // Pop request if it's accepted or rejected
+              if (response.isSuccess) {
                 popNItem(items.length)
                 clientErrorCount = 0
                 lastFailedChunkLength = 0
               }
-              else
-                clientErrorCount += 1
-            }
-            else {
-              Logger.debug(s"Internal error from the pool: \n${Helper.ArrayByte(response.body).toString}")
-              Thread.sleep(5000)
+              else if (response.isClientError) {
+                Logger.debug(s"Client error from the pool: \n${Helper.ArrayByte(response.body).toString}")
+
+                if (items.length > lastFailedChunkLength) {
+                  clientErrorCount = 0
+                  lastFailedChunkLength = items.length
+                }
+
+                if (clientErrorCount >= clientErrorMaxTry) {
+                  Logger.debug("Reach maximum try - clearing chunk")
+                  popNItem(items.length)
+                  clientErrorCount = 0
+                  lastFailedChunkLength = 0
+                }
+                else
+                  clientErrorCount += 1
+              } else {
+                Logger.debug(s"Internal error from the pool: \n${Helper.ArrayByte(response.body).toString}")
+                Thread.sleep(5000)
+              }
             }
           }
+          catch {
+            case _: scala.util.control.ControlThrowable =>
+              break
+            case e: Throwable =>
+              Logger.error("Error occurred when tried to send request to pool", e)
+          }
         }
-        catch {
-          case _: scala.util.control.ControlThrowable =>
-            break
-          case e: Throwable =>
-            Logger.error("Error occurred when tried to send request to pool", e)
-        }
-      }
+      } else if (exitIfEmpty) work = false
     }
-    isRunning = false
+
+    Logger.error("run stopped")
   }
 
   // $COVERAGE-OFF$

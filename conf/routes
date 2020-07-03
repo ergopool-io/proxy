@@ -1,3 +1,5 @@
 # Routes
+GET        /dashboard              controllers.ProxyController.dashboard
+GET        /dashboard/*file        controllers.ProxyController.assetOrDefault(file)
 
-->                  /                   routers.ProxyRouter
+->         /                       routers.ProxyRouter

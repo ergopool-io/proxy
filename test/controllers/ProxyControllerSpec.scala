@@ -44,7 +44,7 @@ class ProxyControllerSpec extends PlaySpec with MockitoSugar with BeforeAndAfter
     when(proxy.client).thenReturn(client)
     when(proxy.pool).thenReturn(pool)
     when(proxy.nodeConnection).thenReturn(client.connection)
-    controller = new ProxyController(stubControllerComponents())(proxy)
+    controller = new ProxyController(null, stubControllerComponents())(proxy)
     super.beforeEach()
   }
 
@@ -434,15 +434,21 @@ class ProxyControllerSpec extends PlaySpec with MockitoSugar with BeforeAndAfter
         |        "max_chunk_size": 10
         |      }
         |    },
+        |    "miner": {
+        |       "pk": "null"
+        |    },
         |    "status" : {
         |      "health": "GREEN"
         |    }
         |}
-        |""".stripMargin.replaceAll("\\s", "")
+        |""".stripMargin
 
     val redInfo: String =
       """
         |{
+        |    "miner": {
+        |       "pk": "null"
+        |    },
         |    "pool" : {
         |      "connection" : "http://localhost:9002",
         |      "config" : {
@@ -453,10 +459,8 @@ class ProxyControllerSpec extends PlaySpec with MockitoSugar with BeforeAndAfter
         |      }
         |    },
         |    "status" : {
-        |      "health": "RED"
-        |      "reason": {
-        |        "walletLock": "RED - Wallet is lock"
-        |     }
+        |      "health": "RED",
+        |      "reason": "RED - Wallet is lock"
         |   }
         |}
         |""".stripMargin

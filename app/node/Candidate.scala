@@ -21,7 +21,7 @@ class Candidate(miningCandidate: Json,
   def getResponse: Json = {
     if (poolTx == null) {
       if (!isTransactionInUnconfirmedTransactions(protectedTx)) {
-        Logger.debug(s"Sending transaction to the network: $protectedTx")
+        if (protectedTx != null) Logger.debug(s"Sending transaction to the network: ${protectedTx.id}")
         val response = client.sendErgoTransaction(protectedTx)
         if (response.isError) {
           Logger.error(

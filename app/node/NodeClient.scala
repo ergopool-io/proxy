@@ -312,11 +312,7 @@ class NodeClient extends NodeConfig {
    * @return response from the node
    */
   def candidateWithTxs(transactions: Vector[Transaction]): Response = {
-    Logger.debug(
-      s"""
-         |List of transactions for candidateWithTxs:
-         |$transactions
-         |""".stripMargin)
+    Logger.debug(s"List of transactions for candidateWithTxs: ${transactions.map(_.id)}")
     val candidateWithTxsBody: String =
       s"""
          |[

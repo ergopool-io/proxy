@@ -33,10 +33,10 @@ class TransactionHandler (client: NodeClient,
    */
   def getPoolTransaction(poolAddress: String, value: Long): Transaction = {
     if (!isTransactionValid(poolTransaction)) {
-      Logger.debug(s"pool transaction is not valid, creating new one. old: $poolTransaction")
+      if (poolTransaction != null) Logger.debug(s"pool transaction is not valid, creating new one. old: ${poolTransaction.id}")
       poolTransaction = null
       createPoolTransaction(poolAddress, value)
-      Logger.debug(s"pool transaction has changed, new one: $poolTransaction")
+      if (poolTransaction != null) Logger.debug(s"pool transaction has changed, new one: ${poolTransaction.id}")
     }
     poolTransaction
   }
@@ -50,10 +50,10 @@ class TransactionHandler (client: NodeClient,
    */
   def getCustomTransaction(value: Long): Transaction = {
     if (!isTransactionValid(customTransaction)) {
-      Logger.debug(s"custom transaction is not valid, creating new one. old: $customTransaction")
+      if (customTransaction != null) Logger.debug(s"custom transaction is not valid, creating new one. old: ${customTransaction.id}")
       customTransaction = null
       createCustomTransaction(value)
-      Logger.debug(s"custom transaction has changed, new one: $customTransaction")
+      if (customTransaction != null) Logger.debug(s"custom transaction has changed, new one: ${customTransaction.id}")
     }
     customTransaction
   }
@@ -141,7 +141,6 @@ class TransactionHandler (client: NodeClient,
     assert(total >= valueWithFee)
 
     val res = client.generateTransaction(protectedAddress, value, inputsRaw)
-    Logger.info(s"generated custom transaction: $res")
 
     if (res.isSuccess) {
       customTransaction = Transaction(res.body)

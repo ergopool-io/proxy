@@ -120,7 +120,7 @@ class PoolQueueTest extends PlaySpec with MockitoSugar {
       pool.push(shares: _*)
       pool.push(mockedTx, mockedProof)
 
-      pool.run()
+      pool.run(exitIfEmpty = true)
       pool.queue.size mustBe 0
       pool.transaction mustNot be(null)
       pool.proof mustNot be(null)
@@ -174,7 +174,7 @@ class PoolQueueTest extends PlaySpec with MockitoSugar {
       pool.push(mockedTx, mockedProof)
       pool.push(shares: _*)
 
-      pool.run()
+      pool.run(exitIfEmpty = true)
       sendCalled mustBe true
       pool.queue.size mustBe 0
       pool.transaction mustNot be(null)

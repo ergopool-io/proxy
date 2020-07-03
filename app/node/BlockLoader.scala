@@ -28,7 +28,7 @@ class BlockLoader(client: NodeClient, boxFinder: BoxFinder, blockFinder: BlockFi
   def loadLatestChainSlice(dbHeight: Int, currentHeight: Int): Unit = {
     if (dbHeight == 0) {
       // Handle first time filling
-      val blocks = fetchBlocks(currentHeight - 1440, currentHeight)
+      val blocks = fetchBlocks(List(1, currentHeight - 1440).max, currentHeight)
       blocks.foreach(_.save())
     }
     else {
