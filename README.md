@@ -55,15 +55,17 @@ java -Dconfig.file=path/to/config -jar ergo-proxy-assembly-0.4.jar
 Proxy needs a mnemonic in order to function. Every time the proxy is run, It creates a new mnemonic if one does not exists. you should save the current mnemonic by going to the swagger pannel and use `/proxy/mnemonic/save` route with your desired password. After that, everytime you run the proxy, you need to load it with the previously used paassword in the swagger panel.
 
 ## Docker Quick Start
-  The proxy has officially supported [Docker package](https://hub.docker.com/r/ergopoolio/proxy), for using your config first create a config file and bind to `/home/ergo/proxy/proxy.conf` for example:
-  
-  ```shell
+To use [dockerized proxy](https://hub.docker.com/r/ergopoolio/proxy), create your desired config file, an empty mnemonic file and and empty file to be used as database and run the proxy:   
+```shell
+$ touch /desired/path/mnemonic
+$ touch /desired/path/sqlite.db
     $ docker run -p 9000:9000 \
       --restart=always \
-      -v /path/on/host/to/ergo/configFile:/home/ergo/proxy/proxy.conf \
-      -d ergopoolio/proxy:latest 
-  ```
-
-You can use `9000` port to load the proxy.
+      -v /desired/path/configFile.conf:/home/ergo/proxy/proxy.conf \
+      -v /diesired/path/sqlite.db:/home/ergo/sqlite.db \
+      -v /desired/path/mnemonic:/home/ergo/mnemonic \
+      -d ergopoolio/proxy:latest
+```
+You can use 9000 port to load the proxy's panel.
   
-  NOTE: The `/path/on/host/to/ergo/configFile` directory must have `777` permission or have owner/group numeric id equal to `9052` to be writable by the container.
+NOTE: The /desired/path/sqlite.db and /desired/path/mnemonic files must have 777 permission or owner/group numeric id equal to 9052 to be writable by the container.
