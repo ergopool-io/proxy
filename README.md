@@ -59,13 +59,13 @@ To use [dockerized proxy](https://hub.docker.com/r/ergopoolio/proxy), create you
 ```shell
 $ touch /desired/path/mnemonic
 $ touch /desired/path/sqlite.db
-    $ docker run -p 9000:9000 \
-      --restart=always \
-      -v /desired/path/configFile.conf:/home/ergo/proxy/proxy.conf \
-      -v /diesired/path/sqlite.db:/home/ergo/sqlite.db \
-      -v /desired/path/mnemonic:/home/ergo/mnemonic \
-      -d ergopoolio/proxy:latest
+$ docker run -p 9000:9000 \
+  --restart=always \
+  -v /desired/path/configFile.conf:/home/ergo/proxy/proxy.conf \
+  -v /diesired/path/sqlite.db:/home/ergo/sqlite.db \
+  -v /desired/path/mnemonic:/home/ergo/mnemonic \
+  -d ergopoolio/proxy:latest
 ```
 You can use 9000 port to load the proxy's panel.
   
-NOTE: The /desired/path/sqlite.db and /desired/path/mnemonic files must have 777 permission or owner/group numeric id equal to 9052 to be writable by the container.
+NOTE: The`/desired/path/sqlite.db` and `/desired/path/mnemonic` files must have 777 permission or owner/group numeric id equal to 9052 to be writable by the container.
