@@ -15,12 +15,13 @@ COPY ["project", "/ergoproxy/project"]
 RUN sbt update
 COPY . /ergoproxy
 WORKDIR /ergoproxy
+RUN sed -i "s/jdbc:sqlite:sqlite.db/jdbc:sqlite:proxy\/sqlite.db/" conf/reference.conf
+RUN echo "mnemonic.filename = \"/home/ergo/proxy/mnemonic\"" >> conf/reference.conf
 RUN sbt assembly
 RUN mv `find . -name ergo-proxy-*.jar` /ergoproxy.jar
 CMD ["java", "-jar", "/ergoproxy.jar"]
 
 FROM openjdk:11-jre-slim
-#LABEL maintainer="Andrey Andreev <andyceo@yandex.ru> (@andyceo)"
 RUN adduser --disabled-password --home /home/ergo --uid 9052 --gecos "ErgoPlatform" ergo && \
     install -m 0750 -o ergo -g ergo  -d /home/ergo/proxy
 COPY --from=builder /ergoproxy.jar /home/ergo/ergoproxy.jar
@@ -28,6 +29,5 @@ USER ergo
 EXPOSE 9000
 WORKDIR /home/ergo
 VOLUME ["/home/ergo/proxy"]
-#ENTRYPOINT ["java", "-jar", "-D\"config.file\"=/home/ergo/proxy/proxy.conf", "/home/ergo/ergoproxy.jar"]
-ENTRYPOINT java -jar -D"config.file"=/home/ergo/proxy/proxy.conf /home/ergo/ergoproxy.jar
+ENTRYPOINT java -jar -D"config.file"=/home/ergo/proxy.conf /home/ergo/ergoproxy.jar
 CMD [""]
