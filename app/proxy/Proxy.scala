@@ -35,7 +35,7 @@ class Proxy @Inject()(nodeClient: NodeClient) extends ProxyConfig with LowerLaye
   lazy val withdrawAddress: String = nodeClient.deriveKey(withdraw)
 
 
-  val minerPK = nodeClient.pk;
+  lazy val minerPK = nodeClient.pk
   // $COVERAGE-OFF$
   /**
    * Information of the proxy

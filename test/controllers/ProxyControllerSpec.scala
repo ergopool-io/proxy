@@ -44,7 +44,7 @@ class ProxyControllerSpec extends PlaySpec with MockitoSugar with BeforeAndAfter
     when(proxy.client).thenReturn(client)
     when(proxy.pool).thenReturn(pool)
     when(proxy.nodeConnection).thenReturn(client.connection)
-    controller = new ProxyController(null, stubControllerComponents())(proxy)
+    controller = new ProxyController(stubControllerComponents())(proxy)
     super.beforeEach()
   }
 

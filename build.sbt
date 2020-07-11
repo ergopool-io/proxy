@@ -20,7 +20,7 @@ version in ThisBuild := {
 git.gitUncommittedChanges in ThisBuild := true
 */
 
-version := "0.5"
+version := "2.2.1"
 
 lazy val root = (project in file(".")).enablePlugins(PlayScala, PlayEbean)
 

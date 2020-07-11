@@ -47,14 +47,14 @@ trait PoolQueue {
     var lastFailedChunkLength: Int = 0
     var work: Boolean = true
     while (work) {
+      Logger.debug(s"Queue start working with size: ${queue.size}")
       if (queue.nonEmpty) {
         breakable {
           try {
             if (isTxsP(queue.head)) {
               Logger.debug(
                 s"""
-                   |Pool Queue found a TxsP:
-                   |${queue.head}
+                   |Pool Queue found a TxsP
                    |""".stripMargin)
               val t = queue.dequeue().asInstanceOf[PoolShare].value
               transaction = t._1
@@ -76,12 +76,12 @@ trait PoolQueue {
               .take(maxChunkSize)
               .takeWhile(p => isShare(p))
               .map(f => f.left.getOrElse(null).body)
-
             if (items.nonEmpty) { // In case of queue has been cleared between "while condition" and "take action"
               val response: HttpResponse[Array[Byte]] = sendPacket(items, proof, transaction)
 
               // Pop request if it's accepted or rejected
               if (response.isSuccess) {
+                Logger.debug(s"Share successfully sent to pull!")
                 popNItem(items.length)
                 clientErrorCount = 0
                 lastFailedChunkLength = 0
@@ -115,7 +115,10 @@ trait PoolQueue {
               Logger.error("Error occurred when tried to send request to pool", e)
           }
         }
-      } else if (exitIfEmpty) work = false
+      } else {
+        Thread.sleep(2000)
+        if (exitIfEmpty) work = false
+      }
     }
 
     Logger.error("run stopped")
@@ -187,6 +190,10 @@ trait PoolQueue {
    * @param shares [[Iterable]] iterable of shares
    */
   def push(shares: Share*): Unit = {
+    Logger.debug(
+      s"""
+         |Number of shares that pushed to queue is : ${shares.size}
+         |""".stripMargin)
     queue.enqueue(shares.map(f => Left(f)): _*)
     runQueue()
   }
@@ -201,11 +208,19 @@ trait PoolQueue {
     Logger.debug(
       s"""
          |New Transaction & Proof pushed:
-         |$txs
+         |Txs id is: ${txs.id}
          |$proof
          |""".stripMargin)
     queue.enqueue(Right((txs, proof)))
   }
 
-  private def isShare(elem: PoolPacket): Boolean = elem.isInstanceOf[PoolTxP]
+  private def isShare(elem: PoolPacket): Boolean = {
+    val flag = elem.isInstanceOf[PoolTxP]
+    if(!flag) Logger.debug(
+      s"""
+         |Response of function IsShare is false for:
+         |$elem
+         |""".stripMargin)
+    flag
+  }
 }

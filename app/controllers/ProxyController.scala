@@ -24,7 +24,7 @@ import scala.util.{Failure, Success, Try}
  * @param cc Controller component
  */
 @Singleton
-class ProxyController @Inject()(assets: Assets, cc: ControllerComponents)(proxy: Proxy)
+class ProxyController @Inject()(cc: ControllerComponents)(proxy: Proxy)
   extends AbstractController(cc) {
   /**
    * Action handler for proxy passing
@@ -132,12 +132,12 @@ class ProxyController @Inject()(assets: Assets, cc: ControllerComponents)(proxy:
    *
    * @return [[Result]] Response from the pool server
    */
+
   def sendShare: MiningAction[RawBuffer] = MiningAction[RawBuffer](proxy) {
     Action(parse.raw) { implicit request: Request[RawBuffer] =>
       val shares = Share(Helper.RawBufferValue(request.body).toJson)
-
+      Logger.debug(s"Get a share from miner ${shares}")
       proxy.sendShares(shares)
-
       Ok(Json.obj().toString()).as("application/json")
     }
   }
@@ -331,9 +331,9 @@ class ProxyController @Inject()(assets: Assets, cc: ControllerComponents)(proxy:
     Redirect("/dashboard")
   }
 
-  def dashboard: Action[AnyContent] = assets.at("index.html")
+  def dashboard: Action[AnyContent] = Assets.at("index.html")
 
   def assetOrDefault(resource: String): Action[AnyContent] = {
-    if (resource.contains(".")) assets.at(resource) else dashboard
+    if (resource.contains(".")) Assets.at(resource) else dashboard
   }
 }
