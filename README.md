@@ -46,13 +46,17 @@ Copy that into a new file and set proper settings for all keys.
 After creating the config file, you can run your proxy:  
 * For Windows:
 ```shell script
-java -D"config.file"=path\to\config -jar ergo-proxy-assembly-0.4.jar
+java -D"config.file"=path\to\config -jar ergo-proxy-assembly-<PROXY_VERSION>.jar
 ```
 * For Unix:
 ```shell script
-java -Dconfig.file=path/to/config -jar ergo-proxy-assembly-0.4.jar
+java -Dconfig.file=path/to/config -jar ergo-proxy-assembly-<PROXY_VERSION>.jar
 ```
-Proxy needs a mnemonic in order to function. Every time the proxy is run, It creates a new mnemonic if one does not exists. you should save the current mnemonic by going to the swagger pannel and use `/proxy/mnemonic/save` route with your desired password. After that, everytime you run the proxy, you need to load it with the previously used paassword in the swagger panel.
+**NOTE**: After the startup, you should save the mnemonic with your desired password in proxy’s dashboard or swagger panel (/proxy/mnemonic/save). After that, every time you run the proxy, you need to load the mnemonic with the previously used password in the swagger panel.
+
+**Otherwise**, your collateral address will change every time you start the proxy and proxy will have to move your ergs to the new collateral address which will result in a few minutes delay and some other problems.
+
+**So, we strongly recommend you to save the mnemonic!**
 
 ## Docker Quick Start
 To use [dockerized proxy](https://hub.docker.com/r/ergopoolio/proxy), create your desired config file and an empty folder to be used by container and run the proxy:
