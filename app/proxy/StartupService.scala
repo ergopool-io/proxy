@@ -27,6 +27,22 @@ class StartupService @Inject()(application: Application,
           Logger.error("Exception happened", e)
           System.exit(1)
       }
+      Future {
+        breakable {
+          while (true) {
+            if(!proxy.mnemonic.isFileExists)
+            {
+              Logger.error(s"""Proxy error: Mnemonic file does not exists, please save your mnemonic file!""".stripMargin)
+              Thread.sleep(5000)
+            }
+            else
+            {
+              Logger.info("Proxy info: Mnemonic saved!")
+              break
+            }
+          }
+        }
+      }
     }
 
     Future {

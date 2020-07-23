@@ -425,6 +425,7 @@ class ProxyControllerSpec extends PlaySpec with MockitoSugar with BeforeAndAfter
     val greenInfo: String =
       """
         |{
+        |    "mnemonicStatus" : "success",
         |    "pool" : {
         |      "connection" : "http://localhost:9002",
         |      "config" : {
@@ -446,6 +447,7 @@ class ProxyControllerSpec extends PlaySpec with MockitoSugar with BeforeAndAfter
     val redInfo: String =
       """
         |{
+        |    "mnemonicStatus" : "failed",
         |    "miner": {
         |       "pk": "null"
         |    },
@@ -477,6 +479,9 @@ class ProxyControllerSpec extends PlaySpec with MockitoSugar with BeforeAndAfter
       val proxyStatus: ProxyStatus = new ProxyStatus
       proxyStatus.reset()
       when(proxy.status).thenReturn(proxyStatus)
+      val mnemonic = mock[Mnemonic]
+      when(proxy.mnemonic).thenReturn(mnemonic)
+      when(mnemonic.isFileExists).thenReturn(true)
       when(proxy.info).thenCallRealMethod()
       when(proxy.nodeInfo).thenCallRealMethod()
       val bytes: ByteString = ByteString("")
@@ -501,6 +506,9 @@ class ProxyControllerSpec extends PlaySpec with MockitoSugar with BeforeAndAfter
       val proxyStatus: ProxyStatus = new ProxyStatus
       proxyStatus.walletLock.setUnhealthy()
       when(proxy.status).thenReturn(proxyStatus)
+      val mnemonic = mock[Mnemonic]
+      when(proxy.mnemonic).thenReturn(mnemonic)
+      when(mnemonic.isFileExists).thenReturn(false)
       when(proxy.info).thenCallRealMethod()
       when(proxy.nodeInfo).thenCallRealMethod()
       val bytes: ByteString = ByteString("")

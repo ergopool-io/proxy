@@ -49,6 +49,7 @@ class Proxy @Inject()(nodeClient: NodeClient) extends ProxyConfig with LowerLaye
        |     "miner": {
        |        "pk": "$minerPK"
        |     },
+       |     "mnemonicStatus": "${if (mnemonic.isFileExists) "success" else "failed"}",
        |     "pool": $pool,
        |     "status": $status
        |   }
